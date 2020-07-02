@@ -257,7 +257,7 @@ was_bridge_blocked(JObj) ->
 
 -spec get_event_type(kz_json:object()) -> event_type().
 get_event_type(JObj) ->
-    {C, N} = kz_util:get_event_type(JObj),
+    {C, N} = kz_api:event_type(JObj),
     try get_app(JObj) of
         App -> {C, N, App}
     catch
