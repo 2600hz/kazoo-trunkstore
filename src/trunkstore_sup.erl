@@ -69,7 +69,7 @@ pool_name() -> ?POOL_NAME.
 %%------------------------------------------------------------------------------
 -spec init(any()) -> kz_types:sup_init_ret().
 init([]) ->
-    _ = kz_util:set_startup(),
+    _ = kz_process:set_startup(),
 
     _ = kz_nodes:bind_for_pool_state('kz_amqp_sup', self()),
 
