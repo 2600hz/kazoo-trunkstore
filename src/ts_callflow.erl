@@ -110,7 +110,7 @@ send_park(#ts_callflow_state{route_req_jobj=JObj
 wait_for_win(State, Timeout) ->
     wait_for_win(State, Timeout, kapps_call_command:receive_event(Timeout)).
 
--spec wait_for_win(state(), pos_integer(), kapps_call_command:request_return()) ->
+-spec wait_for_win(state(), pos_integer(), kapps_call_command:received_event()) ->
           {'won' | 'lost', state()}.
 wait_for_win(State, Timeout, {'ok', JObj}) ->
     case kapi_route:win_v(JObj) of
