@@ -159,26 +159,28 @@ wait_for_bridge(State, Timeout) ->
 
 -spec try_failover(ts_callflow:state()) -> 'ok'.
 try_failover(State) ->
-    case {ts_callflow:get_control_queue(State)
-         ,ts_callflow:get_failover(State)
-         }
-    of
-        {<<>>, _} ->
-            lager:info("no callctl for failover");
-        {_, 'undefined'} ->
-            lager:info("no failover defined");
-        {_, Failover} ->
-            case kz_json:is_empty(Failover) of
-                'true' ->
-                    lager:info("no failover configured");
-                'false' ->
-                    lager:info("trying failover"),
-                    failover(State, Failover)
-            end
+    try_failover(State
+                ,ts_callflow:get_control_queue(State)
+                ,ts_callflow:get_failover(State)
+                ).
+
+try_failover(_State, <<>>, _Failover) ->
+    lager:info("no callctl for failover");
+try_failover(State, _CtlQ, 'undefined') ->
+    lager:info("no failover defined"),
+    ts_callflow:send_hangup(State);
+try_failover(State, _CtlQ, Failover) ->
+    case kz_json:is_empty(Failover) of
+        'true' ->
+            lager:info("no failover configured"),
+            ts_callflow:send_hangup(State);
+        'false' ->
+            lager:info("trying failover"),
+            maybe_execute_failover(State, Failover)
     end.
 
--spec failover(ts_callflow:state(), kz_json:object()) -> 'ok'.
-failover(State, Failover) ->
+-spec maybe_execute_failover(ts_callflow:state(), kz_json:object()) -> 'ok'.
+maybe_execute_failover(State, Failover) ->
     case kz_json:get_ne_binary_value(<<"e164">>, Failover) of
         'undefined' ->
             try_failover_sip(State, kz_json:get_ne_binary_value(<<"sip">>, Failover));
@@ -187,8 +189,9 @@ failover(State, Failover) ->
     end.
 
 -spec try_failover_sip(ts_callflow:state(), kz_term:api_ne_binary()) -> 'ok'.
-try_failover_sip(_, 'undefined') ->
-    lager:info("SIP failover undefined");
+try_failover_sip(State, 'undefined') ->
+    lager:info("no failover (sip or e164) configured"),
+    ts_callflow:send_hangup(State);
 try_failover_sip(State, SIPUri) ->
     CallID = ts_callflow:get_aleg_id(State),
     CtlQ = ts_callflow:get_control_queue(State),
@@ -431,7 +434,7 @@ routing_data(ToDID, AccountId, Settings) ->
 -spec build_ip(kz_term:api_binary(), kz_term:api_binary() | integer()) -> kz_term:api_binary().
 build_ip('undefined', _) -> 'undefined';
 build_ip(IP, 'undefined') -> IP;
-build_ip(IP, <<_/binary>> = PortBin) -> build_ip(IP, kz_term:to_integer(PortBin));
+build_ip(IP, <<PortBin/binary>>) -> build_ip(IP, kz_term:to_integer(PortBin));
 build_ip(IP, 5060) -> IP;
 build_ip(IP, Port) -> list_to_binary([IP, ":", kz_term:to_binary(Port)]).
 
