@@ -427,6 +427,11 @@ maybe_restrict_call(#ts_callflow_state{acctid=AccountId
     lager:debug("trunkstore classified number as ~p", [Classification]),
     Username = kz_json:get_value([<<"Custom-Channel-Vars">>,<<"Username">>], RRObj),
     Realm = kz_json:get_value([<<"Custom-Channel-Vars">>,<<"Realm">>], RRObj),
-    {'ok', Opts} = lookup_user_flags(Username, Realm, AccountId),
-    lager:debug("trunkstore lookup_user_flag results: ~p", [Opts]),
-    <<"deny">> =:= kz_json:get_value([<<"call_restriction">>, Classification, <<"action">>], Opts).
+    case lookup_user_flags(Username, Realm, AccountId) of
+        {'ok', Opts} ->
+            lager:debug("trunkstore lookup_user_flag results: ~p", [Opts]),
+            <<"deny">> =:= kz_json:get_value([<<"call_restriction">>, Classification, <<"action">>], Opts);
+        Error ->
+            lager:error("ignoring call restriction letting call go through due to ~p",[Error]),
+            'false'
+    end.
