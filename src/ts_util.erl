@@ -22,8 +22,6 @@
 -export([constrain_weight/1]).
 
 -export([get_call_duration/1
-        ,lookup_user_flags/3
-        ,lookup_user_flags/4
         ,lookup_did/2
         ]).
 -export([invite_format/2]).
@@ -38,10 +36,12 @@
         ,ep_timeout/1
         ,caller_id/1
         ,offnet_flags/1
+        ,merge_account/1
         ]).
 
 -export([maybe_ensure_cid_valid/5
         ,maybe_restrict_call/2
+        ,onnet_options/1, onnet_options/2
         ]).
 
 -include("ts.hrl").
@@ -116,18 +116,9 @@ lookup_did(DID, AccountId) ->
           {'ok', kz_json:object()} |
           kz_datamgr:data_error().
 lookup_did_from_db(DID, AccountId) ->
-    AccountDb = kzs_util:format_account_db(AccountId),
-    Options = [{'key', DID}],
-
-    case kz_datamgr:get_results(AccountDb, ?TS_VIEW_DIDLOOKUP, Options) of
-        {'ok', []} ->
-            lager:info("cache miss for ~s, no results", [DID]),
-            {'error', 'no_did_found'};
-        {'ok', [ViewJObj]} ->
-            handle_found_did(DID, AccountId, ViewJObj);
-        {'ok', [ViewJObj | _Rest]} ->
-            lager:notice("multiple results for did ~s in acct ~s", [DID, AccountId]),
-            handle_found_did(DID, AccountId, ViewJObj);
+    case kz_datamgr:get_result_doc(AccountId, ?TS_VIEW_DIDLOOKUP, DID) of
+        {'ok', JObj} ->
+            handle_found_did(DID, AccountId, JObj);
         {'error', _}=E ->
             lager:info("cache miss for ~s, error ~p", [DID, E]),
             E
@@ -137,11 +128,8 @@ lookup_did_from_db(DID, AccountId) ->
           {'ok', kz_json:object()}.
 handle_found_did(DID, AccountId, ViewJObj) ->
     lager:info("cache miss for ~s, found result with id ~s", [DID, kz_doc:id(ViewJObj)]),
-    ValueJObj = kz_json:get_value(<<"value">>, ViewJObj),
-    Resp = kz_json:set_value(<<"id">>, kz_doc:id(ViewJObj), ValueJObj),
-
-    cache_lookup_did(DID, AccountId, Resp),
-
+    Resp = kz_json:delete_key([<<"server">>, <<"DIDs">>], ViewJObj),
+    cache_lookup_did(DID, AccountId, merge_account(Resp)),
     {'ok', Resp}.
 
 -spec cache_lookup_did(kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object()) -> 'ok'.
@@ -153,82 +141,14 @@ cache_lookup_did(DID, AccountId, Resp) ->
                         ,CacheProps
                         ).
 
--spec lookup_user_flags(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) ->
-          {'ok', kz_json:object()} |
-          {'error', atom()}.
-lookup_user_flags(Name, Realm, AccountId) ->
-    lookup_user_flags(Name, Realm, AccountId, 'undefined').
-
--spec lookup_user_flags(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:api_binary()) ->
-          {'ok', kz_json:object()} |
-          {'error', atom()}.
-lookup_user_flags('undefined', _, _, 'undefined') ->
-    {'error', 'insufficient_info'};
-lookup_user_flags('undefined', _, AccountId, DID) ->
-    case lookup_did(DID, AccountId) of
-        {'error', _}=E -> E;
-        {'ok', JObj} ->
-            DIDs = kz_json:from_list([{DID, kz_json:get_value(<<"DID_Opts">>, JObj, kz_json:new())}]),
-            Server = kz_json:from_list(
-                       [{<<"DIDs">>, DIDs}
-                       ,{<<"options">>, kz_json:get_value(<<"server">>, JObj, kz_json:new())}
-                       ,{<<"permissions">>, kz_json:new()}
-                       ,{<<"monitor">>, kz_json:from_list([{<<"monitor_enabled">>, 'false'}])}
-                       ,{<<"auth">>, kz_json:get_value(<<"auth">>, JObj, kz_json:new())}
-                       ,{<<"server_name">>, <<>>}
-                       ,{<<"server_type">>, <<>>}
-                       ]),
-            {'ok', kz_json:from_list(
-                     [{<<"server">>, Server}
-                     ,{<<"account">>,
-                       merge_account_attributes(AccountId, kz_json:get_json_value(<<"account">>, JObj, kz_json:new()))
-                      }
-                     ,{<<"call_restriction">>, kz_json:new()}
-                     ])
-            }
-    end;
-lookup_user_flags(Name, Realm, AccountId, _) ->
-    AccountDb = kzs_util:format_account_db(AccountId),
-    case kz_cache:fetch_local(?CACHE_NAME
-                             ,{'lookup_user_flags', Realm, Name, AccountId}
-                             )
-    of
-        {'ok', _}=Result ->
-            lager:info("cache hit for ~s@~s", [Name, Realm]),
-            Result;
-        {'error', 'not_found'} ->
-            Options = [{'key', [kz_term:to_lower_binary(Realm)
-                               ,kz_term:to_lower_binary(Name)
-                               ]
-                       }
-                      ],
-            case kz_datamgr:get_results(AccountDb, <<"trunkstore/lookup_user_flags">>, Options) of
-                {'error', _}=E ->
-                    lager:info("cache miss for ~s@~s, err: ~p", [Name, Realm, E]),
-                    E;
-                {'ok', []} ->
-                    lager:info("cache miss for ~s@~s, no results", [Name, Realm]),
-                    {'ok', kz_json:new()};
-                {'ok', [User|_]} ->
-                    lager:info("cache miss, found view result for ~s@~s with id ~s", [Name, Realm, kz_doc:id(User)]),
-                    ValJObj = kz_json:get_value(<<"value">>, User),
-                    JObj = kz_json:set_value(<<"id">>, kz_doc:id(User), ValJObj),
-
-                    {'ok', AccountJObj} = kzd_accounts:fetch(AccountId),
-                    Restriction = kz_json:get_value(<<"call_restriction">>, AccountJObj, kz_json:new()),
-                    Props = [{<<"call_restriction">>, Restriction}
-                            ,{<<"account">>
-                             ,merge_account_attributes(AccountJObj, kz_json:get_json_value(<<"account">>, JObj, kz_json:new()))
-                             }
-                            ],
-                    FlagsJObj = kz_json:set_values(Props, JObj),
-                    kz_cache:store_local(?CACHE_NAME
-                                        ,{'lookup_user_flags', Realm, Name, AccountId}
-                                        ,FlagsJObj
-                                        ),
-                    {'ok', FlagsJObj}
-            end
-    end.
+-spec merge_account(kz_json:object()) -> kz_json:object().
+merge_account(ServerDoc) ->
+    {'ok', AccountJObj} = kzd_accounts:fetch(kz_doc:account_id(ServerDoc)),
+    Restriction = kz_json:get_value(<<"call_restriction">>, AccountJObj, kz_json:new()),
+    Props = [{<<"call_restriction">>, Restriction}
+            ,{<<"account">>, merge_account_attributes(AccountJObj, ServerDoc)}
+            ],
+    kz_json:set_values(Props, ServerDoc).
 
 -spec merge_account_attributes(kz_term:ne_binary() | kzd_accounts:doc(), kz_json:object()) -> kz_json:object().
 merge_account_attributes(<<AccountId/binary>>, JObj) ->
@@ -417,16 +337,25 @@ validate_from_user(FromUser, AccountId) ->
     end.
 
 -spec maybe_restrict_call(ts_callflow:state(), kz_term:proplist()) -> boolean().
-maybe_restrict_call(#ts_callflow_state{acctid=AccountId
-                                      ,route_req_jobj=RRObj
-                                      }
-                   ,Command
-                   ) ->
+maybe_restrict_call(#ts_callflow_state{} = State, Command) ->
     Number = props:get_value(<<"To-DID">>, Command),
     Classification = knm_converters:classify(Number),
     lager:debug("trunkstore classified number as ~p", [Classification]),
-    Username = kz_json:get_value([<<"Custom-Channel-Vars">>,<<"Username">>], RRObj),
-    Realm = kz_json:get_value([<<"Custom-Channel-Vars">>,<<"Realm">>], RRObj),
-    {'ok', Opts} = lookup_user_flags(Username, Realm, AccountId),
+    Opts = onnet_options(State),
     lager:debug("trunkstore lookup_user_flag results: ~p", [Opts]),
     <<"deny">> =:= kz_json:get_value([<<"call_restriction">>, Classification, <<"action">>], Opts).
+
+-spec onnet_options(ts_callflow:state()) -> kz_json:object().
+onnet_options(State) ->
+    AccountId = ts_callflow:get_account_id(State),
+    AuthorizingId = ts_callflow:get_autorizing_id(State),
+    onnet_options(AccountId, AuthorizingId).
+
+-spec onnet_options(kz_term:api_binary(), kz_term:api_binary()) -> kz_term:api_object().
+onnet_options(undefined, _) -> undefined;
+onnet_options(_, undefined) -> undefined;
+onnet_options(AccountId, AuthorizingId) ->
+    case kz_datamgr:open_cache_doc(AccountId, AuthorizingId) of
+        {ok, Options} -> merge_account(Options);
+        _Else -> undefined
+    end.

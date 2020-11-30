@@ -17,6 +17,8 @@
         ,flush/0, flush/1
         ]).
 
+-export([migrate/1]).
+
 -include("ts.hrl").
 
 -spec flush() -> 'ok'.
@@ -31,20 +33,6 @@ flush(Account) ->
                                  ),
     _ = [kz_cache:erase_local(?CACHE_NAME, Key) || {Key, _Value} <- Flush],
     'ok'.
-
-account_exists_with_realm(Realm) ->
-    ViewOptions = [{'key', kz_term:to_lower_binary(Realm)}],
-    case kz_datamgr:get_results(?KZ_ACCOUNTS_DB, <<"accounts/listing_by_realm">>, ViewOptions) of
-        {'ok', []} -> 'false';
-        {'ok', [AcctObj]} ->
-            {'true'
-            ,kz_json:get_value([<<"value">>, <<"account_db">>], AcctObj)
-            ,kz_json:get_value([<<"value">>, <<"account_id">>], AcctObj)
-            };
-        {'error', _E} ->
-            lager:info("failed to lookup account view: ~p", [_E]),
-            'ignore'
-    end.
 
 %%------------------------------------------------------------------------------
 %% @doc Some calls get stuck if they miss the CDR. This clears them out.
@@ -87,7 +75,7 @@ classifier_inherit(Classifier, UserR) ->
 %%
 %% Usage example:
 %% ```
-%% sup trunkstore_maintenance classifier_deny international pbx_username@realm.domain.tld
+%% sup trunkstore_maintenance classifier_deny international trunkserver_id@account_id
 %% '''
 %% @end
 %%------------------------------------------------------------------------------
@@ -105,17 +93,16 @@ set_classifier_action(Action, Classifier, UserR) ->
         _ ->
             io:format("  ... found\n")
     end,
-    [User, Realm] = re:split(UserR, <<"@">>, [{'return','binary'}, {'parts',2}]),
-    case account_exists_with_realm(Realm) of
-        {'true', AcctDB, AcctID} ->
-            {'ok', Opts} = ts_util:lookup_user_flags(User, Realm, AcctID),
-            TSDocId = kz_doc:id(Opts),
+    [TrunkServerId, AccountId] = re:split(UserR, <<"@">>, [{'return','binary'}, {'parts',2}]),
+    case ts_util:onnet_options(AccountId, TrunkServerId) of
+        'undefined' ->
+            io:format("Failed: trunk server ~s @ ~s does not exist\n", [TrunkServerId, AccountId]);
+        Options ->
+            TSDocId = kz_doc:id(Options),
             Updates = [{[<<"call_restriction">>, Classifier, <<"action">>], Action}],
             UpdateOptions = [{'update', Updates}],
-            {'ok', _} = kz_datamgr:update_doc(AcctDB, TSDocId, UpdateOptions),
-            io:format("Success\n");
-        'false' ->
-            io:format("Failed: account with realm ~p does not exist\n", [Realm])
+            {'ok', _} = kz_datamgr:update_doc(AccountId, TSDocId, UpdateOptions),
+            io:format("Success\n")
     end.
 
 -spec is_ts_cache_object(tuple(), kz_term:ne_binary()) -> boolean().
@@ -125,3 +112,30 @@ is_ts_cache_object({'lookup_did', _DID, AccountId}, AccountId) ->
     'true';
 is_ts_cache_object(_Key, _AccountId) ->
     'false'.
+
+-spec migrate(kz_term:ne_binaries()) -> any().
+migrate(Accounts) ->
+    lists:foreach(fun migrate_trunkstore/1, Accounts).
+
+migrate_trunkstore(AccountId) ->
+    DesignDoc = <<"crossbar_listings/by_type_id">>,
+    Options = [{'key', <<"sys_info">>}],
+    Ids = kz_datamgr:get_result_ids(AccountId, DesignDoc, Options),
+    migrate_trunkstore(AccountId, Ids).
+
+migrate_trunkstore(_AccountId, []) -> ok;
+migrate_trunkstore(AccountId, [Id | Ids]) ->
+    case kz_datamgr:open_doc(AccountId, Id) of
+        {ok, Doc} -> maybe_migrate_trunkstore_doc(Doc);
+        {error, Error} -> io:format("error reading document from trunkstore ~s / ~s => ~p", [AccountId, Id, Error])
+    end,
+    migrate_trunkstore(AccountId, Ids).
+
+needs_migration(Doc) ->
+    lists:any(fun kzd_trunkstore:needs_migration/1, Doc).
+
+maybe_migrate_trunkstore_doc(Doc) ->
+    maybe_migrate_trunkstore_doc(Doc, needs_migration(Doc)).
+
+maybe_migrate_trunkstore_doc(_Doc, false) -> ok;
+maybe_migrate_trunkstore_doc(Doc, true) -> kzd_trunkstore:save(Doc).

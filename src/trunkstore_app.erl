@@ -32,6 +32,7 @@
 -spec start(application:start_type(), any()) -> kz_types:startapp_ret().
 start(_StartType, _StartArgs) ->
     _ = declare_exchanges(),
+    kapps_maintenance:bind(<<"maintenance.migrate">>, trunkstore_maintenance, migrate),
     trunkstore_sup:start_link().
 
 -spec prep_stop(any()) -> 'ok'.
@@ -41,6 +42,7 @@ prep_stop(_State) ->
 
 -spec stop(any()) -> any().
 stop(_State) ->
+    kapps_maintenance:unbind(<<"maintenance.migrate">>, trunkstore_maintenance, migrate),
     'ok'.
 
 -spec declare_exchanges() -> 'ok'.
