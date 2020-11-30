@@ -7,3 +7,4 @@
 | `clear_old_calls/0` |  | |
 | `flush/0` |  | |
 | `flush/1` | `(Account)` | |
+| `migrate/1` | `(Accounts)` | |

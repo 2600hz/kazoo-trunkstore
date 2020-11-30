@@ -36,6 +36,7 @@
         ,get_endpoint_data/1
         ,get_account_id/1
         ,get_kapps_call/1
+        ,get_autorizing_id/1
         ]).
 
 -include("ts.hrl").
@@ -99,9 +100,10 @@ send_park(#ts_callflow_state{route_req_jobj=JObj
                                    ,?APP_NAME, ?APP_VERSION
                                    )
            ],
-    lager:info("trunkstore knows how to route this call, sending park route response"),
+    ServerId = kz_api:server_id(JObj),
+    lager:info("trunkstore knows how to route this call, sending park route response to ~s", [ServerId]),
     _ = kz_amqp_worker:cast(Resp
-                           ,fun(API) -> kapi_route:publish_resp(kz_api:server_id(JObj), API) end
+                           ,fun(API) -> kapi_route:publish_resp(ServerId, API) end
                            ,Worker
                            ),
     wait_for_win(State, ?WAIT_FOR_WIN_TIMEOUT).
@@ -113,9 +115,9 @@ wait_for_win(State, Timeout) ->
 -spec wait_for_win(state(), pos_integer(), kapps_call_command:received_event()) ->
           {'won' | 'lost', state()}.
 wait_for_win(State, Timeout, {'ok', JObj}) ->
-    case kapi_route:win_v(JObj) of
-        'true' -> route_won(State, JObj);
-        'false' -> wait_for_win(State, Timeout)
+    case kz_api:event_name(JObj) of
+        <<"route_win">> -> route_won(State, JObj);
+        _Other -> wait_for_win(State, Timeout)
     end;
 wait_for_win(State, _Timeout, {'error', 'timeout'}) ->
     lager:info("failed to receive route_win"),
@@ -128,7 +130,7 @@ route_won(#ts_callflow_state{amqp_worker=Worker, kapps_call=Call}=State, RouteWi
                             ,[{'callid', kapi_route:call_id(RouteWin)}]
                             ),
 
-    lager:info("callflow has received a route win, taking control of the call"),
+    lager:info("trunkstore has received a route win, taking control of the call"),
 
     {'won', State#ts_callflow_state{callctl_q=kapi_route:control_queue(RouteWin)
                                    ,kapps_call=kapps_call:from_route_win(RouteWin, Call)
@@ -333,6 +335,10 @@ set_account_id(State, ID) -> State#ts_callflow_state{acctid=ID}.
 
 -spec get_account_id(state()) -> kz_term:ne_binary().
 get_account_id(#ts_callflow_state{acctid=ID}) -> ID.
+
+-spec get_autorizing_id(state()) -> kz_term:api_binary().
+get_autorizing_id(#ts_callflow_state{route_req_jobj=JObj}) ->
+    kz_json:get_ne_binary_value([<<"Custom-Channel-Vars">>, <<"Authorizing-ID">>], JObj).
 
 -spec get_control_queue(state()) -> kz_term:api_binary().
 get_control_queue(#ts_callflow_state{callctl_q=CtlQ}) -> CtlQ.

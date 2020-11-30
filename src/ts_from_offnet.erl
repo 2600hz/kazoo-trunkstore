@@ -67,6 +67,7 @@ proceed_with_endpoint(State, Endpoint, RouteReq) ->
               ,{<<"Dial-Endpoint-Method">>, <<"single">>}
               ,{<<"Call-ID">>, CallID}
               ,{<<"Custom-Channel-Vars">>, kz_json:from_list([{<<"Trunkstore-ID">>, Id}])}
+              ,{<<"Continue-After">>, false}
               | default_command_headers(State)
               ],
     State1 = ts_callflow:set_failover(State, kz_json:get_json_value(<<"Failover">>, Endpoint, kz_json:new())),
@@ -285,25 +286,27 @@ get_endpoint_data(State, RouteReq, ToDID, AccountId, NumberProps) ->
     NewCallerId = maybe_anonymize_caller_id(State, {OldCNam, OldCNum}, CidFormat),
     RoutingData = RoutingData1 ++ NewCallerId,
 
+    TrunkstoreId = props:get_value(<<"Trunkstore-ID">>, RoutingData1),
     AuthUser = props:get_value(<<"To-User">>, RoutingData),
     AuthRealm = props:get_value(<<"To-Realm">>, RoutingData),
     AuthzId = props:get_value(<<"Authorizing-ID">>, RoutingData),
     InFormat = props:get_value(<<"Invite-Format">>, RoutingData, <<"username">>),
     Invite = ts_util:invite_format(kz_term:to_lower_binary(InFormat), ToDID) ++ RoutingData,
-    Routines = [fun(E) -> get_endpoint_ccvs(E, AuthUser, AuthRealm, AccountId, AuthzId) end
+    Routines = [fun(E) -> get_endpoint_ccvs(E, AuthUser, AuthRealm, AccountId, AuthzId, TrunkstoreId) end
                ,fun(E) -> get_endpoint_sip_headers(E, AuthUser, AuthRealm) end
                ],
     Endpoint = lists:foldl(fun(F, E) -> F(E) end, Invite, Routines),
     {'endpoint', kz_json:from_list(Endpoint)}.
 
--spec get_endpoint_ccvs(kz_term:proplist(), kz_term:api_binary(), kz_term:api_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> kz_term:proplist().
-get_endpoint_ccvs(Endpoint, AuthUser, AuthRealm, AccountId, AuthzId) ->
+-spec get_endpoint_ccvs(kz_term:proplist(), kz_term:api_binary(), kz_term:api_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> kz_term:proplist().
+get_endpoint_ccvs(Endpoint, AuthUser, AuthRealm, AccountId, AuthzId, TrunkstoreId) ->
     Props = props:filter_undefined([{<<"Auth-User">>, AuthUser}
                                    ,{<<"Auth-Realm">>, AuthRealm}
                                    ,{<<"Direction">>, <<"inbound">>}
                                    ,{<<"Account-ID">>, AccountId}
                                    ,{<<"Authorizing-ID">>, AuthzId}
                                    ,{<<"Authorizing-Type">>, <<"sys_info">>}
+                                   ,{<<"Trunkstore-ID">>, TrunkstoreId}
                                    ]),
     [{<<"Custom-Channel-Vars">>, kz_json:from_list(Props)} | Endpoint].
 
@@ -320,6 +323,9 @@ routing_data(ToDID, AccountId) ->
         {'ok', Settings} ->
             lager:info("got settings for DID ~s", [ToDID]),
             routing_data(ToDID, AccountId, Settings);
+        {'error', 'not_found'} ->
+            lager:info("DID ~s not found in ~s", [ToDID, AccountId]),
+            throw('no_did_found');
         {'error', 'no_did_found'} ->
             lager:info("DID ~s not found in ~s", [ToDID, AccountId]),
             throw('no_did_found');
@@ -342,18 +348,8 @@ routing_data(ToDID, AccountId, Settings) ->
     AuthU = kz_json:get_value(<<"auth_user">>, AuthOpts),
     AuthR = kz_json:find(<<"auth_realm">>, [AuthOpts, Acct]),
 
-    {Srv, AcctStuff} =
-        try ts_util:lookup_user_flags(AuthU, AuthR, AccountId, ToDID) of
-            {'ok', AccountSettings} ->
-                lager:info("got account settings"),
-                {kz_json:get_json_value(<<"server">>, AccountSettings, kz_json:new())
-                ,kz_json:get_json_value(<<"account">>, AccountSettings, kz_json:new())
-                }
-        catch
-            _E:_R ->
-                lager:info("failed to get account settings: ~p: ~p", [_E, _R]),
-                {kz_json:new(), kz_json:new()}
-        end,
+    Srv = kzd_trunkserver:server(Settings),
+    AcctStuff = kzd_trunkstore:account(Settings),
 
     SrvOptions = kz_json:get_value(<<"options">>, Srv, kz_json:new()),
 
@@ -425,6 +421,7 @@ routing_data(ToDID, AccountId, Settings) ->
                        ,{<<"To-IP">>, build_ip(ToIP, ToPort)}
                        ,{<<"Route-Options">>, RouteOpts}
                        ,{<<"Hunt-Account-ID">>, HuntAccountId}
+                       ,{<<"Trunkstore-ID">>, kzd_trunkserver:trunkstore_id(Settings)}
                        ,{<<"Authorizing-ID">>, kz_doc:id(Settings)} % connectivity doc id
                        ],
            V =/= 'undefined',
