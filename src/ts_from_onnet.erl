@@ -237,7 +237,7 @@ maybe_referred_call(RouteReq) ->
 maybe_redirected_call(RouteReq) ->
     maybe_fix_request(get_redirected_by(RouteReq), RouteReq).
 
--spec maybe_fix_request( 'undefined' | {kz_term:ne_binary(), kz_term:ne_binary()}, kapi_route:req()) -> kapi_route:req().
+-spec maybe_fix_request(kz_term:api_ne_binary(), kapi_route:req()) -> kapi_route:req().
 maybe_fix_request('undefined', RouteReq) -> RouteReq;
 maybe_fix_request(EndpointId, RouteReq) ->
     AccountId = kapi_route:account_id(RouteReq),
@@ -250,14 +250,12 @@ maybe_fix_request(EndpointId, RouteReq) ->
 fix_request_authz(AuthorizingId, RouteReq) ->
     kz_json:set_value([<<"Custom-Channel-Vars">>, <<"Authorizing-ID">>], AuthorizingId, RouteReq).
 
--spec get_referred_by(kz_json:object()) ->
-          'undefined' | {kz_term:ne_binary(), kz_term:ne_binary()}.
+-spec get_referred_by(kz_json:object()) -> kz_term:api_ne_binary().
 get_referred_by(JObj) ->
     ReferredBy = kz_json:get_value([<<"Custom-Channel-Vars">>, <<"Referred-By">>], JObj),
     endpoint_from_sip_params(ReferredBy).
 
--spec get_redirected_by(kz_json:object()) ->
-          'undefined' | {kz_term:ne_binary(), kz_term:ne_binary()}.
+-spec get_redirected_by(kz_json:object()) -> kz_term:api_ne_binary().
 get_redirected_by(JObj) ->
     RedirectedBy = kz_json:get_value([<<"Custom-Channel-Vars">>, <<"Redirected-By">>], JObj),
     endpoint_from_sip_params(RedirectedBy).
