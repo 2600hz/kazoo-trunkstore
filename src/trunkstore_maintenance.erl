@@ -120,8 +120,10 @@ migrate(Accounts) ->
 migrate_trunkstore(AccountId) ->
     DesignDoc = <<"crossbar_listings/by_type_id">>,
     Options = [{'key', <<"sys_info">>}],
-    Ids = kz_datamgr:get_result_ids(AccountId, DesignDoc, Options),
-    migrate_trunkstore(AccountId, Ids).
+    case kz_datamgr:get_result_ids(AccountId, DesignDoc, Options) of
+        {ok, Ids} -> migrate_trunkstore(AccountId, Ids);
+        {error, Error} -> io:format("error get sys_info docs from ~s => ~p~n", [AccountId, Error])
+    end.
 
 migrate_trunkstore(_AccountId, []) -> ok;
 migrate_trunkstore(AccountId, [Id | Ids]) ->
@@ -138,4 +140,6 @@ maybe_migrate_trunkstore_doc(Doc) ->
     maybe_migrate_trunkstore_doc(Doc, needs_migration(Doc)).
 
 maybe_migrate_trunkstore_doc(_Doc, false) -> ok;
-maybe_migrate_trunkstore_doc(Doc, true) -> kzd_trunkstore:save(Doc).
+maybe_migrate_trunkstore_doc(Doc, true) ->
+    io:format("migrating trunkstore document ~s / ~s~n", [kz_doc:account_id(Doc), kz_doc:id(Doc)]),
+    kzd_trunkstore:save(Doc).
