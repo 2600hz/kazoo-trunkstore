@@ -47,23 +47,13 @@ maybe_onnet_data(State) ->
     RouteReq = ts_callflow:get_request_data(State),
     CallID = ts_callflow:get_aleg_id(State),
     AccountId = ts_callflow:get_account_id(State),
+
     {ToUser, _} = kapps_util:get_destination(RouteReq, ?APP_NAME, <<"outbound_user_field">>),
     ToDID = knm_converters:normalize(ToUser, AccountId),
     FromUser = kz_json:get_ne_binary_value(<<"Caller-ID-Name">>, RouteReq),
 
     lager:info("onnet request from ~s(~s) to ~s", [FromUser, AccountId, ToDID]),
-    Options =
-        case ts_util:lookup_did(FromUser, AccountId) of
-            {'ok', Opts} -> Opts;
-            _ ->
-                Username = kz_json:get_value([<<"Custom-Channel-Vars">>, <<"Username">>], RouteReq, <<>>),
-                Realm = kz_json:get_value([<<"Custom-Channel-Vars">>, <<"Realm">>], RouteReq, <<>>),
-
-                case ts_util:lookup_user_flags(Username, Realm, AccountId) of
-                    {'ok', Opts} -> Opts;
-                    _ -> kz_json:new()
-                end
-        end,
+    Options = ts_util:onnet_options(State),
     ServerOptions = kz_json:get_json_value([<<"server">>, <<"options">>], Options, kz_json:new()),
     case knm_converters:is_reconcilable(ToDID)
         orelse knm_converters:classify(ToDID) =:= <<"emergency">>
@@ -154,6 +144,7 @@ onnet_data(CallID, AccountId, FromUser, ToDID, Options, State) ->
                          ,{?KEY_CCVS, kz_json:from_list([{<<"Account-ID">>, AccountId}])}
                          ,{?KEY_REQUESTOR_CCVS, ts_callflow:get_custom_channel_vars(State)}
                          ,{?KEY_REQUESTOR_CSHS, CustomSIPHeaders}
+                         ,{<<"Continue-After">>, false}
                          | kz_api:default_headers(ts_callflow:get_worker_queue(State)
                                                  ,?APP_NAME, ?APP_VERSION
                                                  )
@@ -246,40 +237,34 @@ maybe_referred_call(RouteReq) ->
 maybe_redirected_call(RouteReq) ->
     maybe_fix_request(get_redirected_by(RouteReq), RouteReq).
 
--spec maybe_fix_request( 'undefined' | {kz_term:ne_binary(), kz_term:ne_binary()}, kapi_route:req()) -> kapi_route:req().
+-spec maybe_fix_request(kz_term:api_ne_binary(), kapi_route:req()) -> kapi_route:req().
 maybe_fix_request('undefined', RouteReq) -> RouteReq;
-maybe_fix_request({Username, Realm}, RouteReq) ->
+maybe_fix_request(EndpointId, RouteReq) ->
     AccountId = kapi_route:account_id(RouteReq),
-    case ts_util:lookup_user_flags(Username, Realm, AccountId) of
-        {'ok', _Opts} -> kz_json:set_values(fix_request_values(Username, Realm), RouteReq);
+    case ts_util:onnet_options(AccountId, EndpointId) of
+        {'ok', _Opts} -> fix_request_authz(EndpointId, RouteReq);
         _ -> RouteReq
     end.
 
--spec fix_request_values(binary(), binary()) -> [{kz_json:path(), kz_term:ne_binary()}].
-fix_request_values(Username, Realm) ->
-    [{[<<"Custom-Channel-Vars">>, <<"Username">>], Username}
-    ,{[<<"Custom-Channel-Vars">>, <<"Realm">>], Realm}
-    ,{[<<"Custom-Channel-Vars">>, <<"Authorizing-Type">>], <<"sys_info">>}
-    ].
+-spec fix_request_authz(binary(), kz_json:object()) -> kz_json:object().
+fix_request_authz(AuthorizingId, RouteReq) ->
+    kz_json:set_value([<<"Custom-Channel-Vars">>, <<"Authorizing-ID">>], AuthorizingId, RouteReq).
 
--spec get_referred_by(kz_json:object()) ->
-          'undefined' | {kz_term:ne_binary(), kz_term:ne_binary()}.
+-spec get_referred_by(kz_json:object()) -> kz_term:api_ne_binary().
 get_referred_by(JObj) ->
     ReferredBy = kz_json:get_value([<<"Custom-Channel-Vars">>, <<"Referred-By">>], JObj),
-    extract_sip_username(ReferredBy).
+    endpoint_from_sip_params(ReferredBy).
 
--spec get_redirected_by(kz_json:object()) ->
-          'undefined' | {kz_term:ne_binary(), kz_term:ne_binary()}.
+-spec get_redirected_by(kz_json:object()) -> kz_term:api_ne_binary().
 get_redirected_by(JObj) ->
     RedirectedBy = kz_json:get_value([<<"Custom-Channel-Vars">>, <<"Redirected-By">>], JObj),
-    extract_sip_username(RedirectedBy).
+    endpoint_from_sip_params(RedirectedBy).
 
--spec extract_sip_username(kz_term:api_ne_binary()) ->
-          'undefined' | {kz_term:ne_binary(), kz_term:ne_binary()}.
-extract_sip_username('undefined') -> 'undefined';
-extract_sip_username(Contact) ->
-    ReOptions = [{'capture', 'all_but_first', 'binary'}],
-    case catch(re:run(Contact, <<".*sip:(.*)@(.*)">>, ReOptions)) of
-        {'match', [User, Realm]} -> {User, Realm};
-        _ -> 'undefined'
+-spec endpoint_from_sip_params(kz_term:api_ne_binary()) -> kz_term:api_ne_binary().
+endpoint_from_sip_params(undefined) -> undefined;
+endpoint_from_sip_params(Contact) ->
+    case kzsip_uri:uris(Contact) of
+        [#uri{ext_opts=Opts1, opts=Opts2}] ->
+            props:get_value(<<"endpoint_id">>, Opts1 ++ Opts2);
+        _Else -> undefined
     end.
