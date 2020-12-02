@@ -113,31 +113,35 @@ is_ts_cache_object({'lookup_did', _DID, AccountId}, AccountId) ->
 is_ts_cache_object(_Key, _AccountId) ->
     'false'.
 
+-spec fetch_options() -> kz_view:options().
+fetch_options() ->
+    [{'doc_type', <<"sys_info">>}
+    ,'include_docs'
+    ].
+
+-spec fetch_selector() -> kz_view:selector().
+fetch_selector() ->
+    [{'start', [{<<"doc_type">>, <<"sys_info">>}]}
+    ,{'end', [{<<"doc_type">>, <<"sys_info">>}]}
+    ].
+
 -spec migrate(kz_term:ne_binaries()) -> any().
 migrate(Accounts) ->
     lists:foreach(fun migrate_trunkstore/1, Accounts).
 
 migrate_trunkstore(AccountId) ->
     DesignDoc = <<"crossbar_listings/by_type_id">>,
-    Options = [{'key', <<"sys_info">>}],
-    case kz_datamgr:get_result_ids(AccountId, DesignDoc, Options) of
-        {ok, Ids} -> migrate_trunkstore(AccountId, Ids);
-        {error, Error} -> io:format("error get sys_info docs from ~s => ~p~n", [AccountId, Error])
-    end.
+    Result = kz_view:find(AccountId, DesignDoc, fetch_selector(), fetch_options()),
+    migrate_trunkstore(AccountId, Result).
 
-migrate_trunkstore(_AccountId, []) -> ok;
-migrate_trunkstore(AccountId, [Id | Ids]) ->
-    case kz_datamgr:open_doc(AccountId, Id) of
-        {ok, Doc} -> maybe_migrate_trunkstore_doc(Doc);
-        {error, Error} -> io:format("error reading document from trunkstore ~s / ~s => ~p", [AccountId, Id, Error])
-    end,
-    migrate_trunkstore(AccountId, Ids).
-
-needs_migration(Doc) ->
-    lists:any(fun kzd_trunkstore:needs_migration/1, Doc).
+migrate_trunkstore(_AccountId, {'error', _Error}) -> io:format("error getting trunkstore documents from ~s => ~p", [_AccountId, _Error]);
+migrate_trunkstore(_AccountId, {'ok', []}) -> io:format("no trunkstore documents for account ~s~n", [_AccountId]);
+migrate_trunkstore(_AccountId, {'ok', Result}) ->
+    io:format("checking ~B trunkstore documents for account ~s~n", [length(Result), _AccountId]),
+    [maybe_migrate_trunkstore_doc(kz_json:get_json_value(<<"doc">>, Row)) || Row <- Result].
 
 maybe_migrate_trunkstore_doc(Doc) ->
-    maybe_migrate_trunkstore_doc(Doc, needs_migration(Doc)).
+    maybe_migrate_trunkstore_doc(Doc, kzd_trunkstore:needs_migration(Doc)).
 
 maybe_migrate_trunkstore_doc(_Doc, false) -> ok;
 maybe_migrate_trunkstore_doc(Doc, true) ->
