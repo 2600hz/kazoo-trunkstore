@@ -336,20 +336,19 @@ routing_data(ToDID, AccountId) ->
 
 -spec routing_data(kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object()) -> [{<<_:48,_:_*8>>, any()}].
 routing_data(ToDID, AccountId, Settings) ->
-    AuthOpts = kz_json:get_value(<<"auth">>, Settings, kz_json:new()),
-    Acct = kz_json:get_value(<<"account">>, Settings, kz_json:new()),
+    Srv = kzd_trunkserver:server(Settings),
+    AcctStuff = kzd_trunkstore:account(Settings),
+    AuthOpts = kz_json:get_value(<<"auth">>, Srv, kz_json:new()),
     DIDOptions = kz_json:get_value(<<"DID_Opts">>, Settings, kz_json:new()),
-    HuntAccountId = kz_json:get_value([<<"server">>, <<"hunt_account_id">>], Settings),
+    HuntAccountId = kz_json:get_value(<<"hunt_account_id">>, Srv),
     RouteOpts = kz_json:get_value(<<"options">>, DIDOptions, []),
     NumConfig = case knm_numbers:get(ToDID, [{'auth_by', AccountId}]) of
                     {'ok', [JObj]} -> JObj;
                     _ -> kz_json:new()
                 end,
     AuthU = kz_json:get_value(<<"auth_user">>, AuthOpts),
-    AuthR = kz_json:find(<<"auth_realm">>, [AuthOpts, Acct]),
+    AuthR = kz_json:find(<<"auth_realm">>, [AuthOpts, AcctStuff]),
 
-    Srv = kzd_trunkserver:server(Settings),
-    AcctStuff = kzd_trunkstore:account(Settings),
 
     SrvOptions = kz_json:get_value(<<"options">>, Srv, kz_json:new()),
 
