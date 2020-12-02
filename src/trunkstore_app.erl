@@ -42,7 +42,7 @@ prep_stop(_State) ->
 
 -spec stop(any()) -> any().
 stop(_State) ->
-    kapps_maintenance:unbind(<<"maintenance.migrate">>, trunkstore_maintenance, migrate),
+    kapps_maintenance:unbind('migrate', trunkstore_maintenance, migrate),
     'ok'.
 
 -spec declare_exchanges() -> 'ok'.
