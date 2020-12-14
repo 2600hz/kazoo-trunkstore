@@ -365,8 +365,11 @@ routing_data(ToDID, AccountId, Settings) ->
 
     InboundFormat = kz_json:get_value(<<"inbound_format">>, SrvOptions, <<"npan">>),
     {CalleeName, CalleeNumber} = callee_id([kz_json:get_value(<<"caller_id">>, DIDOptions)
-                                           ,kz_json:get_value(<<"callerid_account">>, Settings)
-                                           ,kz_json:get_value(<<"callerid_server">>, Settings)
+                                           ,kz_json:get_value(<<"caller_id">>, AcctStuff)
+                                           ,kz_json:get_value(<<"caller_id">>, SrvOptions)
+                                           ,kz_json:from_list([{<<"cid_name">>, kzd_trunkserver:server_name(Settings)}
+                                                              ,{<<"cid_number">>, ToDID}
+                                                              ])
                                            ]),
     ProgressTimeout = ts_util:progress_timeout([kz_json:get_value(<<"progress_timeout">>, DIDOptions)
                                                ,kz_json:get_value(<<"progress_timeout">>, SrvOptions)
@@ -411,8 +414,8 @@ routing_data(ToDID, AccountId, Settings) ->
                        ,{<<"Custom-SIP-Headers">>, SIPHeaders}
                        ,{<<"Ignore-Early-Media">>, IgnoreEarlyMedia}
                        ,{<<"Endpoint-Timeout">>, Timeout}
-                       ,{<<"Callee-ID-Name">>, CalleeName}
-                       ,{<<"Callee-ID-Number">>, CalleeNumber}
+                       ,{<<"Outbound-Callee-ID-Name">>, CalleeName}
+                       ,{<<"Outbound-Callee-ID-Number">>, CalleeNumber}
                        ,{<<"To-User">>, AuthU}
                        ,{<<"To-Realm">>, AuthR}
                        ,{<<"Caller-ID-Options">>, CidOptions}
