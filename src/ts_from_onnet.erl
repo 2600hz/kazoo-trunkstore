@@ -133,6 +133,7 @@ onnet_data(CallID, AccountId, FromUser, ToDID, Options, State) ->
                          ,{?KEY_RESOURCE_TYPE, <<"audio">>}
                          ,{?KEY_TO_DID, ToDID}
                          ,{?KEY_ACCOUNT_ID, AccountId}
+                         ,{?KEY_ACCOUNT_REALM, kzd_accounts:fetch_realm(AccountId)}
                          ,{?KEY_APPLICATION_NAME, <<"bridge">>}
                          ,{?KEY_FLAGS, get_flags(DIDOptions, ServerOptions, AccountOptions, State)}
                          ,{?KEY_MEDIA, MediaHandling}
