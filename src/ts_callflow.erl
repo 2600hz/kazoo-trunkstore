@@ -170,7 +170,7 @@ process_event_for_bridge(#ts_callflow_state{aleg_callid=ALeg} = State
                         ) ->
     CallId = kz_json:get_value(<<"Call-ID">>, JObj, ALeg),
     case is_success(<<"Response-Message">>, JObj)
-        orelse was_bridge_blocked(JObj)
+        orelse is_channel_down(JObj)
     of
         'true' when CallId =:= ALeg ->
             lager:info("offnet bridge has finished"),
@@ -206,20 +206,20 @@ process_event_for_bridge(State, _JObj, {<<"call_event">>, <<"CHANNEL_DESTROY">>,
     {'hangup', State};
 process_event_for_bridge(State, JObj, {<<"call_event">>, <<"CHANNEL_EXECUTE_COMPLETE">>, <<"bridge">>}) ->
     case was_bridge_successful(JObj)
-        orelse was_bridge_blocked(JObj)
+        orelse is_channel_down(JObj)
     of
         'true' ->
             lager:info("bridge finished, time to hangup"),
             {'hangup', State};
         'false' ->
-            lager:info("bridge failed: ~s",[kz_json:encode(JObj)]),
+            lager:info_unsafe("bridge failed: ~s",[kz_json:encode(JObj)]),
             {'error', State}
     end;
 process_event_for_bridge(State, JObj, {<<"error">>, _, <<"bridge">>}) ->
     lager:debug("channel execution error while waiting for bridge: ~s"
                ,[kz_json:encode(JObj)]
                ),
-    case was_bridge_blocked(JObj) of
+    case is_channel_down(JObj) of
         'true' ->
             lager:info("bridge was blocked"),
             {'hangup', State};
@@ -251,11 +251,11 @@ was_bridge_successful(JObj) ->
                          ,<<"UNSPECIFIED">>
                          ).
 
--spec was_bridge_blocked(kz_json:object()) -> boolean().
-was_bridge_blocked(JObj) ->
-    Blocked = not kz_call_event:is_authorized(JObj),
-    lager:debug("was bridge blocked: ~p", [Blocked]),
-    Blocked.
+-spec is_channel_down(kz_json:object()) -> boolean().
+is_channel_down(JObj) ->
+    ChannelState = kz_call_event:channel_state(JObj),
+    lager:debug("channel state: ~p", [ChannelState]),
+    ChannelState =:= <<"DOWN">>.
 
 -spec get_event_type(kz_json:object()) -> event_type().
 get_event_type(JObj) ->
