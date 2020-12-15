@@ -373,6 +373,9 @@ routing_data(ToDID, AccountId, Settings) ->
     {CalleeName, CalleeNumber} = callee_id([kz_json:get_value(<<"caller_id">>, DIDOptions)
                                            ,kz_json:get_value(<<"caller_id">>, AcctStuff)
                                            ,kz_json:get_value(<<"caller_id">>, SrvOptions)
+                                           ,kz_json:from_list([{<<"cid_name">>, kz_json:get_ne_binary_value([<<"cnam">>, <<"display_name">>], NumConfig)}
+                                                              ,{<<"cid_number">>, ToDID}
+                                                              ])
                                            ,kz_json:from_list([{<<"cid_name">>, kzd_trunkserver:server_name(Settings)}
                                                               ,{<<"cid_number">>, ToDID}
                                                               ])
@@ -456,6 +459,8 @@ callee_id([JObj | T]) ->
                  }
             of
                 {'undefined', 'undefined'} -> callee_id(T);
+                {'undefined', _} -> callee_id(T);
+                {_, 'undefined'} -> callee_id(T);
                 CalleeID -> CalleeID
             end
     end.
