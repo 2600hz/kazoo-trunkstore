@@ -17,6 +17,7 @@
 -export([start_link/2, init/3]).
 
 -include("ts.hrl").
+-include_lib("kazoo_amqp/include/kapi_offnet_resource.hrl").
 
 -define(SERVER, ?MODULE).
 
@@ -61,17 +62,20 @@ proceed_with_endpoint(State, Endpoint, RouteReq) ->
 
     Id = kz_json:get_ne_binary_value([<<"Custom-Channel-Vars">>, <<"Authorizing-ID">>], Endpoint),
 
+    State1 = ts_callflow:set_failover(State, kz_json:get_json_value(<<"Failover">>, Endpoint, kz_json:new())),
+    EP = kz_json:delete_key(<<"Failover">>, Endpoint),
+
     Command = [{<<"Application-Name">>, <<"bridge">>}
-              ,{<<"Endpoints">>, [Endpoint]}
+              ,{<<"Endpoints">>, [EP]}
               ,{<<"Media">>, MediaHandling}
               ,{<<"Dial-Endpoint-Method">>, <<"single">>}
               ,{<<"Call-ID">>, CallID}
               ,{<<"Custom-Channel-Vars">>, kz_json:from_list([{<<"Trunkstore-ID">>, Id}])}
               ,{<<"Continue-After">>, false}
-              | default_command_headers(State)
+              | default_command_headers(State1)
               ],
-    State1 = ts_callflow:set_failover(State, kz_json:get_json_value(<<"Failover">>, Endpoint, kz_json:new())),
-    State2 = ts_callflow:set_endpoint_data(State1, Endpoint),
+
+    State2 = ts_callflow:set_endpoint_data(State1, EP),
     send_park(State2, Command).
 
 -spec default_command_headers(ts_callflow:state()) -> kz_term:proplist().
@@ -152,7 +156,7 @@ send_privacy(State) ->
 wait_for_bridge(State, Timeout) ->
     case ts_callflow:wait_for_bridge(State, Timeout) of
         {'bridged', _} -> lager:info("channel bridged, we're done");
-        {'hangup', _} -> 'ok';
+        {'hangup', _} -> ts_callflow:send_hangup(State);
         {'error', State1} ->
             lager:info("error waiting for bridge, try failover"),
             try_failover(State1)
@@ -167,9 +171,10 @@ try_failover(State) ->
 
 try_failover(_State, <<>>, _Failover) ->
     lager:info("no callctl for failover");
-try_failover(State, _CtlQ, 'undefined') ->
-    lager:info("no failover defined"),
-    ts_callflow:send_hangup(State);
+try_failover(#ts_callflow_state{aleg_callid=ALeg}, CtlQ, 'undefined') ->
+    %% send failure code to Call
+    _ = kz_call_response:send(ALeg, CtlQ, <<"486">>),
+    lager:info("offnet failed");
 try_failover(State, _CtlQ, Failover) ->
     case kz_json:is_empty(Failover) of
         'true' ->
@@ -233,6 +238,7 @@ try_failover_e164(State, ToDID) ->
           ,{<<"Resource-Type">>, <<"audio">>}
           ,{<<"To-DID">>, ToDID}
           ,{<<"Account-ID">>, AccountId}
+          ,{?KEY_ACCOUNT_REALM, kzd_accounts:fetch_realm(AccountId)}
           ,{<<"Control-Queue">>, CtlQ}
           ,{<<"Application-Name">>, <<"bridge">>}
           ,{<<"Flags">>, kz_json:get_value(<<"flags">>, Endpoint)}
@@ -365,8 +371,14 @@ routing_data(ToDID, AccountId, Settings) ->
 
     InboundFormat = kz_json:get_value(<<"inbound_format">>, SrvOptions, <<"npan">>),
     {CalleeName, CalleeNumber} = callee_id([kz_json:get_value(<<"caller_id">>, DIDOptions)
-                                           ,kz_json:get_value(<<"callerid_account">>, Settings)
-                                           ,kz_json:get_value(<<"callerid_server">>, Settings)
+                                           ,kz_json:get_value(<<"caller_id">>, AcctStuff)
+                                           ,kz_json:get_value(<<"caller_id">>, SrvOptions)
+                                           ,kz_json:from_list([{<<"cid_name">>, kz_json:get_ne_binary_value([<<"cnam">>, <<"display_name">>], NumConfig)}
+                                                              ,{<<"cid_number">>, ToDID}
+                                                              ])
+                                           ,kz_json:from_list([{<<"cid_name">>, kzd_trunkserver:server_name(Settings)}
+                                                              ,{<<"cid_number">>, ToDID}
+                                                              ])
                                            ]),
     ProgressTimeout = ts_util:progress_timeout([kz_json:get_value(<<"progress_timeout">>, DIDOptions)
                                                ,kz_json:get_value(<<"progress_timeout">>, SrvOptions)
@@ -381,7 +393,6 @@ routing_data(ToDID, AccountId, Settings) ->
                         ,kz_json:get_value(<<"failover">>, SrvOptions)
                         ,kz_json:get_value(<<"failover">>, AcctStuff)
                         ],
-
     Failover = ts_util:failover(FailoverLocations),
     lager:info("failover found: ~p", [Failover]),
 
@@ -411,8 +422,8 @@ routing_data(ToDID, AccountId, Settings) ->
                        ,{<<"Custom-SIP-Headers">>, SIPHeaders}
                        ,{<<"Ignore-Early-Media">>, IgnoreEarlyMedia}
                        ,{<<"Endpoint-Timeout">>, Timeout}
-                       ,{<<"Callee-ID-Name">>, CalleeName}
-                       ,{<<"Callee-ID-Number">>, CalleeNumber}
+                       ,{<<"Outbound-Callee-ID-Name">>, CalleeName}
+                       ,{<<"Outbound-Callee-ID-Number">>, CalleeNumber}
                        ,{<<"To-User">>, AuthU}
                        ,{<<"To-Realm">>, AuthR}
                        ,{<<"Caller-ID-Options">>, CidOptions}
@@ -448,6 +459,8 @@ callee_id([JObj | T]) ->
                  }
             of
                 {'undefined', 'undefined'} -> callee_id(T);
+                {'undefined', _} -> callee_id(T);
+                {_, 'undefined'} -> callee_id(T);
                 CalleeID -> CalleeID
             end
     end.

@@ -128,8 +128,8 @@ lookup_did_from_db(DID, AccountId) ->
           {'ok', kz_json:object()}.
 handle_found_did(DID, AccountId, ViewJObj) ->
     lager:info("cache miss for ~s, found result with id ~s", [DID, kz_doc:id(ViewJObj)]),
-    Resp = kz_json:delete_key([<<"server">>, <<"DIDs">>], ViewJObj),
-    cache_lookup_did(DID, AccountId, merge_account(Resp)),
+    Resp = merge_account(ViewJObj),
+    cache_lookup_did(DID, AccountId, Resp),
     {'ok', Resp}.
 
 -spec cache_lookup_did(kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object()) -> 'ok'.
@@ -144,9 +144,10 @@ cache_lookup_did(DID, AccountId, Resp) ->
 -spec merge_account(kz_json:object()) -> kz_json:object().
 merge_account(ServerDoc) ->
     {'ok', AccountJObj} = kzd_accounts:fetch(kz_doc:account_id(ServerDoc)),
+    TrunkAccount = kzd_trunkstore:account(ServerDoc),
     Restriction = kz_json:get_value(<<"call_restriction">>, AccountJObj, kz_json:new()),
     Props = [{<<"call_restriction">>, Restriction}
-            ,{<<"account">>, merge_account_attributes(AccountJObj, ServerDoc)}
+            ,{<<"account">>, merge_account_attributes(AccountJObj, TrunkAccount)}
             ],
     kz_json:set_values(Props, ServerDoc).
 

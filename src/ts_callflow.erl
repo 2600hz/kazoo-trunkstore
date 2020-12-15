@@ -212,7 +212,7 @@ process_event_for_bridge(State, JObj, {<<"call_event">>, <<"CHANNEL_EXECUTE_COMP
             lager:info("bridge finished, time to hangup"),
             {'hangup', State};
         'false' ->
-            lager:info("bridge failed: ~s",[kz_json:encode(JObj)]),
+            lager:info_unsafe("bridge failed: ~s",[kz_json:encode(JObj)]),
             {'error', State}
     end;
 process_event_for_bridge(State, JObj, {<<"error">>, _, <<"bridge">>}) ->
