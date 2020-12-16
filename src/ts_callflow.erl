@@ -219,7 +219,9 @@ process_event_for_bridge(State, JObj, {<<"error">>, _, <<"bridge">>}) ->
     lager:debug("channel execution error while waiting for bridge: ~s"
                ,[kz_json:encode(JObj)]
                ),
-    case was_bridge_blocked(JObj) of
+    case not was_bridge_dialplan_no_endpoints_error(JObj)
+        andalso was_bridge_blocked(JObj)
+    of
         'true' ->
             lager:info("bridge was blocked"),
             {'hangup', State};
@@ -250,6 +252,10 @@ was_bridge_successful(JObj) ->
                          ,JObj
                          ,<<"UNSPECIFIED">>
                          ).
+
+-spec was_bridge_dialplan_no_endpoints_error(kz_json:object()) -> boolean().
+was_bridge_dialplan_no_endpoints_error(JObj) ->
+    kz_json:get_ne_binary_value(<<"Dialplan-Error">>, JObj) =:= <<"no_endpoints">>.
 
 -spec was_bridge_blocked(kz_json:object()) -> boolean().
 was_bridge_blocked(JObj) ->
