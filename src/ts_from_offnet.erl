@@ -201,15 +201,31 @@ try_failover_sip(State, 'undefined') ->
 try_failover_sip(State, SIPUri) ->
     CallID = ts_callflow:get_aleg_id(State),
     CtlQ = ts_callflow:get_control_queue(State),
+    Endpoint = ts_callflow:get_endpoint_data(State),
+    AccountId = ts_callflow:get_account_id(State),
+    TrunkstoreId = kz_json:get_ne_binary_value(<<"Trunkstore-ID">>, Endpoint),
+    TrunkserverId = kz_json:get_ne_binary_value(<<"Trunkserver-ID">>, Endpoint),
 
     lager:info("routing to failover sip uri: ~s", [SIPUri]),
-    EndPoint = kz_json:from_list([{<<"Invite-Format">>, <<"route">>}
-                                 ,{<<"Route">>, SIPUri}
-                                 ]),
+    SIPEndpoint = kz_json:from_list([{<<"Invite-Format">>, <<"route">>}
+                                    ,{<<"Route">>, SIPUri}
+                                    ,{<<"Outbound-Caller-ID-Name">>, kz_json:get_ne_binary_value(<<"Outbound-Caller-ID-Name">>, Endpoint)}
+                                    ,{<<"Outbound-Caller-ID-Number">>, kz_json:get_ne_binary_value(<<"Outbound-Caller-ID-Number">>, Endpoint)}
+                                    ,{<<"Outbound-Callee-ID-Name">>, kz_json:get_ne_binary_value(<<"Outbound-Callee-ID-Name">>, Endpoint)}
+                                    ,{<<"Outbound-Callee-ID-Number">>, kz_json:get_ne_binary_value(<<"Outbound-Callee-ID-Number">>, Endpoint)}
+                                    ,{<<"Custom-Channel-Vars">>, kz_json:from_list([{<<"Account-ID">>, AccountId}
+                                                                                   ,{<<"Authorizing-ID">>, TrunkserverId}
+                                                                                   ,{<<"Authorizing-Type">>, <<"sys_info">>}
+                                                                                   ,{<<"Trunkstore-ID">>, TrunkstoreId}
+                                                                                   ,{<<"Trunkserver-ID">>, TrunkserverId}
+                                                                                   ,{<<"Ignore-Display-Updates">>, true}
+                                                                                   ])}
+                                    ]),
+
     %% since we only route to one endpoint, we specify most options on the endpoint's leg
     Command = [{<<"Call-ID">>, CallID}
               ,{<<"Application-Name">>, <<"bridge">>}
-              ,{<<"Endpoints">>, [EndPoint]}
+              ,{<<"Endpoints">>, [SIPEndpoint]}
               | default_command_headers(State)
               ],
     ts_callflow:send_command(State
@@ -220,13 +236,11 @@ try_failover_sip(State, SIPUri) ->
 
 -spec try_failover_e164(ts_callflow:state(), kz_term:ne_binary()) -> 'ok'.
 try_failover_e164(State, ToDID) ->
-    RouteReq = ts_callflow:get_request_data(State),
-    OriginalCIdNumber = kz_json:get_ne_binary_value(<<"Caller-ID-Number">>, RouteReq),
-    OriginalCIdName = kz_json:get_ne_binary_value(<<"Caller-ID-Name">>, RouteReq),
     CallID = ts_callflow:get_aleg_id(State),
     AccountId = ts_callflow:get_account_id(State),
-
     Endpoint = ts_callflow:get_endpoint_data(State),
+    TrunkstoreId = kz_json:get_ne_binary_value(<<"Trunkstore-ID">>, Endpoint),
+    TrunkserverId = kz_json:get_ne_binary_value(<<"Trunkserver-ID">>, Endpoint),
 
     Timeout = kz_json:get_integer_value(<<"timeout">>, Endpoint),
 
@@ -244,13 +258,21 @@ try_failover_e164(State, ToDID) ->
           ,{<<"Flags">>, kz_json:get_value(<<"flags">>, Endpoint)}
           ,{<<"Timeout">>, Timeout}
           ,{<<"Ignore-Early-Media">>, kz_json:get_value(<<"ignore_early_media">>, Endpoint)}
-          ,{<<"Outbound-Caller-ID-Name">>, kz_json:get_ne_binary_value(<<"Outbound-Caller-ID-Name">>, Endpoint, OriginalCIdName)}
-          ,{<<"Outbound-Caller-ID-Number">>, kz_json:get_ne_binary_value(<<"Outbound-Caller-ID-Number">>, Endpoint, OriginalCIdNumber)}
+          ,{<<"Outbound-Caller-ID-Name">>, kz_json:get_ne_binary_value(<<"Outbound-Caller-ID-Name">>, Endpoint)}
+          ,{<<"Outbound-Caller-ID-Number">>, kz_json:get_ne_binary_value(<<"Outbound-Caller-ID-Number">>, Endpoint)}
+          ,{<<"Outbound-Callee-ID-Name">>, kz_json:get_ne_binary_value(<<"Outbound-Callee-ID-Name">>, Endpoint)}
+          ,{<<"Outbound-Callee-ID-Number">>, kz_json:get_ne_binary_value(<<"Outbound-Callee-ID-Number">>, Endpoint)}
           ,{<<"Ringback">>, kz_json:get_ne_binary_value(<<"ringback">>, Endpoint)}
           ,{<<"Hunt-Account-ID">>, kz_json:get_ne_binary_value(<<"Hunt-Account-ID">>, Endpoint)}
           ,{<<"Custom-SIP-Headers">>, ts_callflow:get_custom_sip_headers(State)}
           ,{<<"Inception">>,  kz_json:get_ne_binary_value(<<"Inception">>, CCVs)}
-          ,{<<"Custom-Channel-Vars">>, kz_json:from_list([{<<"Account-ID">>, AccountId}])}
+          ,{<<"Custom-Channel-Vars">>, kz_json:from_list([{<<"Account-ID">>, AccountId}
+                                                         ,{<<"Authorizing-ID">>, TrunkserverId}
+                                                         ,{<<"Authorizing-Type">>, <<"sys_info">>}
+                                                         ,{<<"Trunkstore-ID">>, TrunkstoreId}
+                                                         ,{<<"Trunkserver-ID">>, TrunkserverId}
+                                                         ,{<<"Ignore-Display-Updates">>, true}
+                                                         ])}
           | kz_api:default_headers(ts_callflow:get_worker_queue(State)
                                   ,?APP_NAME, ?APP_VERSION
                                   )
@@ -312,6 +334,7 @@ get_endpoint_ccvs(Endpoint, AuthUser, AuthRealm, AccountId, AuthzId, TrunkstoreI
                                    ,{<<"Account-ID">>, AccountId}
                                    ,{<<"Authorizing-ID">>, AuthzId}
                                    ,{<<"Authorizing-Type">>, <<"sys_info">>}
+                                   ,{<<"Trunkserver-ID">>, AuthzId}
                                    ,{<<"Trunkstore-ID">>, TrunkstoreId}
                                    ]),
     [{<<"Custom-Channel-Vars">>, kz_json:from_list(Props)} | Endpoint].
@@ -432,6 +455,7 @@ routing_data(ToDID, AccountId, Settings) ->
                        ,{<<"Route-Options">>, RouteOpts}
                        ,{<<"Hunt-Account-ID">>, HuntAccountId}
                        ,{<<"Trunkstore-ID">>, kzd_trunkserver:trunkstore_id(Settings)}
+                       ,{<<"Trunkserver-ID">>, kzd_trunkserver:server_id(Settings)}
                        ,{<<"Authorizing-ID">>, kz_doc:id(Settings)} % connectivity doc id
                        ],
            V =/= 'undefined',
