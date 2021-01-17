@@ -53,7 +53,7 @@ maybe_onnet_data(State) ->
     FromUser = kz_json:get_ne_binary_value(<<"Caller-ID-Name">>, RouteReq),
 
     lager:info("onnet request from ~s(~s) to ~s", [FromUser, AccountId, ToDID]),
-    Options = ts_util:onnet_options(State),
+    Options = ts_util:onnet_options(State, kz_json:new()),
     ServerOptions = kz_json:get_json_value([<<"server">>, <<"options">>], Options, kz_json:new()),
     case knm_converters:is_reconcilable(ToDID)
         orelse knm_converters:classify(ToDID) =:= <<"emergency">>
@@ -242,9 +242,9 @@ maybe_redirected_call(RouteReq) ->
 maybe_fix_request('undefined', RouteReq) -> RouteReq;
 maybe_fix_request(EndpointId, RouteReq) ->
     AccountId = kapi_route:account_id(RouteReq),
-    case ts_util:onnet_options(AccountId, EndpointId) of
-        {'ok', _Opts} -> fix_request_authz(EndpointId, RouteReq);
-        _ -> RouteReq
+    case ts_util:onnet_options(AccountId, EndpointId, 'undefined') of
+        'undefined' -> RouteReq;
+        _Opts -> fix_request_authz(EndpointId, RouteReq)
     end.
 
 -spec fix_request_authz(binary(), kz_json:object()) -> kz_json:object().

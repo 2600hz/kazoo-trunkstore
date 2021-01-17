@@ -94,7 +94,7 @@ set_classifier_action(Action, Classifier, UserR) ->
             io:format("  ... found\n")
     end,
     [TrunkServerId, AccountId] = re:split(UserR, <<"@">>, [{'return','binary'}, {'parts',2}]),
-    case ts_util:onnet_options(AccountId, TrunkServerId) of
+    case ts_util:onnet_options(AccountId, TrunkServerId, 'undefined') of
         'undefined' ->
             io:format("Failed: trunk server ~s @ ~s does not exist\n", [TrunkServerId, AccountId]);
         Options ->
