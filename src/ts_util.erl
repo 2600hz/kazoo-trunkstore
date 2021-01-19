@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2010-2020, 2600Hz
+%%% @copyright (C) 2010-2021, 2600Hz
 %%% @doc utility functions for Trunkstore
 %%% Some functions make use of the inet_parse module. This is an undocumented
 %%% module, and as such the functions may change or be removed.
@@ -41,7 +41,7 @@
 
 -export([maybe_ensure_cid_valid/5
         ,maybe_restrict_call/2
-        ,onnet_options/1, onnet_options/2
+        ,onnet_options/2, onnet_options/3
         ]).
 
 -include("ts.hrl").
@@ -342,21 +342,21 @@ maybe_restrict_call(#ts_callflow_state{} = State, Command) ->
     Number = props:get_value(<<"To-DID">>, Command),
     Classification = knm_converters:classify(Number),
     lager:debug("trunkstore classified number as ~p", [Classification]),
-    Opts = onnet_options(State),
+    Opts = onnet_options(State, kz_json:new()),
     lager:debug("trunkstore lookup_user_flag results: ~p", [Opts]),
     <<"deny">> =:= kz_json:get_value([<<"call_restriction">>, Classification, <<"action">>], Opts).
 
--spec onnet_options(ts_callflow:state()) -> kz_json:object().
-onnet_options(State) ->
+-spec onnet_options(ts_callflow:state(), Default) -> kz_json:object() | Default.
+onnet_options(State, Default) ->
     AccountId = ts_callflow:get_account_id(State),
     AuthorizingId = ts_callflow:get_autorizing_id(State),
-    onnet_options(AccountId, AuthorizingId).
+    onnet_options(AccountId, AuthorizingId, Default).
 
--spec onnet_options(kz_term:api_binary(), kz_term:api_binary()) -> kz_term:api_object().
-onnet_options(undefined, _) -> undefined;
-onnet_options(_, undefined) -> undefined;
-onnet_options(AccountId, AuthorizingId) ->
+-spec onnet_options(kz_term:api_binary(), kz_term:api_binary(), Default) -> kz_json:object() | Default.
+onnet_options('undefined', _, Default) -> Default;
+onnet_options(_, 'undefined', Default) -> Default;
+onnet_options(AccountId, AuthorizingId, Default) ->
     case kz_datamgr:open_cache_doc(AccountId, AuthorizingId) of
-        {ok, Options} -> merge_account(Options);
-        _Else -> undefined
+        {'ok', Options} -> merge_account(Options);
+        _Else -> Default
     end.
