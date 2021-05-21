@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2020, 2600Hz
+%%% @copyright (C) 2011-2021, 2600Hz
 %%% @doc Common functionality for onnet and offnet call handling
 %%% @author James Aimonetti
 %%%
@@ -144,7 +144,7 @@ wait_for_bridge(State, 'undefined') ->
 wait_for_bridge(State, Timeout) ->
     wait_for_bridge(State, Timeout, kapps_call_command:receive_event(Timeout * 1000)).
 
--spec wait_for_bridge(state(), kz_term:api_integer(), kapps_call_command:request_return()) ->
+-spec wait_for_bridge(state(), kz_term:api_integer(), kapps_call_command:received_event()) ->
           {'hangup' | 'error' | 'bridged', state()}.
 wait_for_bridge(State, Timeout, {'ok', EventJObj}) ->
     case process_event_for_bridge(State, EventJObj) of
