@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2012-2020, 2600Hz
+%%% @copyright (C) 2012-2021, 2600Hz
 %%% @doc
 %%% @author James Aimonetti
 %%%
@@ -32,17 +32,17 @@
 -spec start(application:start_type(), any()) -> kz_types:startapp_ret().
 start(_StartType, _StartArgs) ->
     _ = declare_exchanges(),
-    kapps_maintenance:bind('migrate', trunkstore_maintenance, migrate),
+    _ = kapps_maintenance:bind('migrate', 'trunkstore_maintenance', 'migrate'),
     trunkstore_sup:start_link().
 
 -spec prep_stop(any()) -> 'ok'.
 prep_stop(_State) ->
-    kz_nodes:unbind_for_pool_state('kz_amqp_sup', whereis('trunkstore_sup')),
+    _ = kz_nodes:unbind_for_pool_state('kz_amqp_sup', whereis('trunkstore_sup')),
     'ok'.
 
--spec stop(any()) -> any().
+-spec stop(any()) -> 'ok'.
 stop(_State) ->
-    kapps_maintenance:unbind('migrate', trunkstore_maintenance, migrate),
+    _ = kapps_maintenance:unbind('migrate', 'trunkstore_maintenance', 'migrate'),
     'ok'.
 
 -spec declare_exchanges() -> 'ok'.

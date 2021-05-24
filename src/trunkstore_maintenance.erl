@@ -132,18 +132,20 @@ migrate(Accounts) ->
 migrate_trunkstore(AccountId) ->
     DesignDoc = <<"crossbar_listings/by_type_id">>,
     Result = kz_view:find(AccountId, DesignDoc, fetch_selector(), fetch_options()),
-    migrate_trunkstore(AccountId, Result).
+    migrate_trunkstore_docs(AccountId, Result).
 
-migrate_trunkstore(_AccountId, {'error', _Error}) -> io:format("error getting trunkstore documents from ~s => ~p", [_AccountId, _Error]);
-migrate_trunkstore(_AccountId, {'ok', []}) -> io:format("no trunkstore documents for account ~s~n", [_AccountId]);
-migrate_trunkstore(_AccountId, {'ok', Result}) ->
-    io:format("checking ~B trunkstore documents for account ~s~n", [length(Result), _AccountId]),
+migrate_trunkstore_docs(AccountId, {'error', _Error}) ->
+    io:format("error getting trunkstore documents from ~s => ~p", [AccountId, _Error]);
+migrate_trunkstore_docs(AccountId, {'ok', []}) ->
+    io:format("no trunkstore documents for account ~s~n", [AccountId]);
+migrate_trunkstore_docs(AccountId, {'ok', Result}) ->
+    io:format("checking ~B trunkstore documents for account ~s~n", [length(Result), AccountId]),
     [maybe_migrate_trunkstore_doc(kz_json:get_json_value(<<"doc">>, Row)) || Row <- Result].
 
 maybe_migrate_trunkstore_doc(Doc) ->
     maybe_migrate_trunkstore_doc(Doc, kzd_trunkstore:needs_migration(Doc)).
 
-maybe_migrate_trunkstore_doc(_Doc, false) -> ok;
-maybe_migrate_trunkstore_doc(Doc, true) ->
+maybe_migrate_trunkstore_doc(_Doc, 'false') -> 'ok';
+maybe_migrate_trunkstore_doc(Doc, 'true') ->
     io:format("migrating trunkstore document ~s / ~s~n", [kz_doc:account_id(Doc), kz_doc:id(Doc)]),
     kzd_trunkstore:save(Doc).

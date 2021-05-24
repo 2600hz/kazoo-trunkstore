@@ -175,7 +175,7 @@ get_flags(DIDOptions, ServerOptions, AccountOptions, State) ->
     lists:foldl(fun(F, A) -> F(DIDOptions, ServerOptions, AccountOptions, Call, A) end, Flags, Routines).
 
 -spec get_offnet_flags(kz_json:object(), kz_json:object(), kz_json:object(), kapps_call:call(), kz_term:ne_binaries()) -> kz_term:ne_binaries().
-get_offnet_flags(DIDOptions, ServerOptions, AccountOptions, _, Flags) ->
+get_offnet_flags(DIDOptions, ServerOptions, AccountOptions, _Call, Flags) ->
     case ts_util:offnet_flags([kz_json:get_value(<<"DID_Opts">>, DIDOptions)
                               ,kz_json:get_value(<<"flags">>, ServerOptions)
                               ,kz_json:get_value(<<"flags">>, AccountOptions)
@@ -186,7 +186,7 @@ get_offnet_flags(DIDOptions, ServerOptions, AccountOptions, _, Flags) ->
     end.
 
 -spec get_offnet_dynamic_flags(kz_json:object(), kz_json:object(), kz_json:object(), kapps_call:call(), kz_term:ne_binaries()) -> kz_term:ne_binaries().
-get_offnet_dynamic_flags(_, ServerOptions, AccountOptions, Call, Flags) ->
+get_offnet_dynamic_flags(_DIDOptions, ServerOptions, AccountOptions, Call, Flags) ->
     case ts_util:offnet_flags([kz_json:get_value(<<"dynamic_flags">>, ServerOptions)
                               ,kz_json:get_value(<<"dynamic_flags">>, AccountOptions)
                               ])

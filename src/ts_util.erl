@@ -47,6 +47,9 @@
 -include("ts.hrl").
 -include_lib("kernel/include/inet.hrl"). %% for hostent record, used in find_ip/1
 
+%% Account views
+-define(TS_VIEW_DIDLOOKUP, <<"trunkstore/lookup_did">>).
+
 -define(VALIDATE_CALLER_ID, kapps_config:get_is_true(?CONFIG_CAT, <<"ensure_valid_caller_id">>, 'false')).
 -define(HONOR_DIVERSION, kapps_config:get_is_true(?CONFIG_CAT, <<"honor_diversions_by_cid_validation">>, 'false')).
 
@@ -151,12 +154,7 @@ merge_account(ServerDoc) ->
             ],
     kz_json:set_values(Props, ServerDoc).
 
--spec merge_account_attributes(kz_term:ne_binary() | kzd_accounts:doc(), kz_json:object()) -> kz_json:object().
-merge_account_attributes(<<AccountId/binary>>, JObj) ->
-    case kzd_accounts:fetch(AccountId) of
-        {'ok', Account} -> merge_account_attributes(Account, JObj);
-        {'error', _} -> JObj
-    end;
+-spec merge_account_attributes(kzd_accounts:doc(), kz_json:object()) -> kz_json:object().
 merge_account_attributes(AccountDoc, JObj) ->
     CIDOptions = kzd_accounts:caller_id_options(AccountDoc),
 
