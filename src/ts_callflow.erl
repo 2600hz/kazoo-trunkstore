@@ -228,13 +228,15 @@ process_event_for_bridge(State, JObj, {<<"error">>, _, <<"bridge">>}) ->
         'false' ->
             {'error', State}
     end;
-process_event_for_bridge(_State, _JObj, {<<"call_event">>, <<"CHANNEL_EXECUTE_COMPLETE">>, <<"answer">>}) ->
+process_event_for_bridge(_State, _JObj
+                        ,{<<"call_event">>, <<"CHANNEL_EXECUTE_COMPLETE">>, <<"answer">>}
+                        ) ->
     %% support one legged bridges such as onnet conference
     lager:info("channel was answered"),
     'ignore';
 process_event_for_bridge(#ts_callflow_state{aleg_callid=ALeg}=State
                         ,JObj
-                        ,{<<"call_event">>, <<"CHANNEL_ANSWER">>, _}
+                        ,{<<"call_event">>, <<"CHANNEL_BRIDGE">>, _}
                         ) ->
     BLeg = kz_call_event:other_leg_call_id(JObj),
     lager:debug("channel ~s bridged to ~s", [ALeg, BLeg]),
