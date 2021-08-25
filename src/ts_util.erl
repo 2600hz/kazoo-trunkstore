@@ -235,7 +235,7 @@ sip_headers(L) when is_list(L) ->
 %% cascade from DID to Srv to Account
 failover(L) ->
     Failover = simple_extract(L),
-    case kz_json:is_json_object(L) of
+    case kz_json:is_json_object(Failover) of
         'false' -> 'undefined';
         'true' -> Failover
     end.
