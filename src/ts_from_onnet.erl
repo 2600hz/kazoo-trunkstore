@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2021, 2600Hz
+%%% @copyright (C) 2011-2022, 2600Hz
 %%% @doc Calls coming from known clients, getting settings for caller-id and
 %%% what not, and sending the calls offnet.
 %%%
@@ -126,6 +126,12 @@ onnet_data(CallID, AccountId, FromUser, ToDID, Options, State) ->
                 ]
         end,
 
+    CCVs = kz_json:from_list([{<<"Account-ID">>, AccountId}
+                             ,{<<"Trunkstore-ID">>, kzd_trunkserver:trunkstore_id(Options)}
+                             ,{<<"Trunkserver-ID">>, kzd_trunkserver:server_id(Options)}
+                             ,{<<"Application-Name">>, ?APP_NAME}
+                             ]),
+
     Command = [KV
                || {_,V}=KV <- CallerID
                       ++ EmergencyCallerID
@@ -142,7 +148,7 @@ onnet_data(CallID, AccountId, FromUser, ToDID, Options, State) ->
                          ,{?KEY_RINGBACK, kz_json:get_value(<<"ringback">>, DIDOptions)}
                          ,{?KEY_CSHS, SIPHeaders}
                          ,{?KEY_HUNT_ACCOUNT_ID, kz_json:get_value(<<"hunt_account_id">>, ServerOptions)}
-                         ,{?KEY_CCVS, kz_json:from_list([{<<"Account-ID">>, AccountId}])}
+                         ,{?KEY_CCVS, CCVs}
                          ,{?KEY_REQUESTOR_CCVS, ts_callflow:get_custom_channel_vars(State)}
                          ,{?KEY_REQUESTOR_CSHS, CustomSIPHeaders}
                          ,{<<"Continue-After">>, false}
