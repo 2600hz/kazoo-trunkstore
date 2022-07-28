@@ -268,10 +268,10 @@ get_redirected_by(JObj) ->
     endpoint_from_sip_params(RedirectedBy).
 
 -spec endpoint_from_sip_params(kz_term:api_ne_binary()) -> kz_term:api_ne_binary().
-endpoint_from_sip_params(undefined) -> undefined;
+endpoint_from_sip_params('undefined') -> 'undefined';
 endpoint_from_sip_params(Contact) ->
     case kzsip_uri:uris(Contact) of
         [#uri{ext_opts=Opts1, opts=Opts2}] ->
             props:get_value(<<"endpoint_id">>, Opts1 ++ Opts2);
-        _Else -> undefined
+        _Else -> 'undefined'
     end.

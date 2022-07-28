@@ -79,7 +79,7 @@ proceed_with_endpoint(State, Endpoint, RouteReq) ->
               ,{<<"Dial-Endpoint-Method">>, <<"single">>}
               ,{<<"Call-ID">>, CallID}
               ,{<<"Custom-Channel-Vars">>, CCVs}
-              ,{<<"Continue-After">>, false}
+              ,{<<"Continue-After">>, 'false'}
               | default_command_headers(State1)
               ],
 
@@ -214,6 +214,14 @@ try_failover_sip(State, SIPUri) ->
     TrunkstoreId = kz_json:get_ne_binary_value(<<"Trunkstore-ID">>, Endpoint),
     TrunkserverId = kz_json:get_ne_binary_value(<<"Trunkserver-ID">>, Endpoint),
 
+    CCVs = kz_json:from_list([{<<"Account-ID">>, AccountId}
+                             ,{<<"Authorizing-ID">>, TrunkserverId}
+                             ,{<<"Authorizing-Type">>, <<"sys_info">>}
+                             ,{<<"Trunkstore-ID">>, TrunkstoreId}
+                             ,{<<"Trunkserver-ID">>, TrunkserverId}
+                             ,{<<"Ignore-Display-Updates">>, 'true'}
+                             ]),
+
     lager:info("routing to failover sip uri: ~s", [SIPUri]),
     SIPEndpoint = kz_json:from_list([{<<"Invite-Format">>, <<"route">>}
                                     ,{<<"Route">>, SIPUri}
@@ -221,13 +229,7 @@ try_failover_sip(State, SIPUri) ->
                                     ,{<<"Outbound-Caller-ID-Number">>, kz_json:get_ne_binary_value(<<"Outbound-Caller-ID-Number">>, Endpoint)}
                                     ,{<<"Outbound-Callee-ID-Name">>, kz_json:get_ne_binary_value(<<"Outbound-Callee-ID-Name">>, Endpoint)}
                                     ,{<<"Outbound-Callee-ID-Number">>, kz_json:get_ne_binary_value(<<"Outbound-Callee-ID-Number">>, Endpoint)}
-                                    ,{<<"Custom-Channel-Vars">>, kz_json:from_list([{<<"Account-ID">>, AccountId}
-                                                                                   ,{<<"Authorizing-ID">>, TrunkserverId}
-                                                                                   ,{<<"Authorizing-Type">>, <<"sys_info">>}
-                                                                                   ,{<<"Trunkstore-ID">>, TrunkstoreId}
-                                                                                   ,{<<"Trunkserver-ID">>, TrunkserverId}
-                                                                                   ,{<<"Ignore-Display-Updates">>, true}
-                                                                                   ])}
+                                    ,{<<"Custom-Channel-Vars">>, CCVs}
                                     ]),
 
     %% since we only route to one endpoint, we specify most options on the endpoint's leg
@@ -279,7 +281,7 @@ try_failover_e164(State, ToDID) ->
                                                          ,{<<"Authorizing-Type">>, <<"sys_info">>}
                                                          ,{<<"Trunkstore-ID">>, TrunkstoreId}
                                                          ,{<<"Trunkserver-ID">>, TrunkserverId}
-                                                         ,{<<"Ignore-Display-Updates">>, true}
+                                                         ,{<<"Ignore-Display-Updates">>, 'true'}
                                                          ])}
           | kz_api:default_headers(ts_callflow:get_worker_queue(State)
                                   ,?APP_NAME, ?APP_VERSION
