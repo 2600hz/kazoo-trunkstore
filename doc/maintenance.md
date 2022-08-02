@@ -8,4 +8,4 @@
 | `flush/0`              |                      |                                                  |
 | `flush/1`              | `(Account)`          |                                                  |
 | `migrate/0`            |                      | Migrates all connectivity docs to the new format |
-| `migrate/1`            | `(AccountId)         | Migrates an account's connectivity docs          |
+| `migrate/1`            | `(AccountId)`         | Migrates an account's connectivity docs          |
