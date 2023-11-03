@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2010-2021, 2600Hz
+%%% @copyright (C) 2010-2023, 2600Hz
 %%% @doc utility functions for Trunkstore
 %%% Some functions make use of the inet_parse module. This is an undocumented
 %%% module, and as such the functions may change or be removed.
@@ -343,7 +343,7 @@ maybe_restrict_call(#ts_callflow_state{} = State, Command) ->
     Classification = knm_converters:classify(Number),
     lager:debug("trunkstore classified number as ~p", [Classification]),
     Opts = onnet_options(State, kz_json:new()),
-    lager:debug("trunkstore lookup_user_flag results: ~p", [Opts]),
+    lager:debug("trunkstore lookup_user_flag results: ~s", [kz_json:encode(Opts)]),
     <<"deny">> =:= kz_json:get_value([<<"call_restriction">>, Classification, <<"action">>], Opts).
 
 -spec onnet_options(ts_callflow:state(), Default) -> kz_json:object() | Default.

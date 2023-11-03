@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2012-2021, 2600Hz
+%%% @copyright (C) 2012-2023, 2600Hz
 %%% @doc
 %%% @author James Aimonetti
 %%%
@@ -17,9 +17,11 @@
         ,flush/0, flush/1
         ]).
 
--export([migrate/1]).
+-export([migrate/0, migrate/1]).
 
 -include("ts.hrl").
+
+-elvis([{elvis_style, no_debug_call, disable}]).
 
 -spec flush() -> 'ok'.
 flush() ->
@@ -86,9 +88,9 @@ classifier_deny(Classifier, UserR) ->
 set_classifier_action(Action, Classifier, UserR) ->
     io:format("Classifier: ~p", [Classifier]),
     Classifiers = knm_converters:available_classifiers(),
-    case lists:member(Classifier, kz_json:get_keys(Classifiers)) of
-        'false' ->
-            io:format("\nNo ~p classifier among configured classifiers ~p\n", [Classifier, kz_json:get_keys(Classifiers)]),
+    case kz_json:find_value(<<"name">>, Classifier, Classifiers, 'undefined') of
+        'undefined' ->
+            io:format("\nNo ~p classifier among configured classifiers ~p\n", [Classifier, Classifiers]),
             exit('no_such_classifier');
         _ ->
             io:format("  ... found\n")
@@ -125,9 +127,15 @@ fetch_selector() ->
     ,{'end', [{<<"doc_type">>, <<"sys_info">>}]}
     ].
 
--spec migrate(kz_term:ne_binaries()) -> any().
-migrate(Accounts) ->
-    lists:foreach(fun migrate_trunkstore/1, Accounts).
+-spec migrate() -> 'ok'.
+migrate() ->
+    migrate(kapps_util:get_all_accounts('raw')).
+
+-spec migrate(kz_term:ne_binary() | kz_term:ne_binaries()) -> 'ok'.
+migrate([_|_]=Accounts) ->
+    lists:foreach(fun migrate_trunkstore/1, Accounts);
+migrate(<<AccountId/binary>>) ->
+    migrate([AccountId]).
 
 migrate_trunkstore(AccountId) ->
     DesignDoc = <<"crossbar_listings/by_type_id">>,
