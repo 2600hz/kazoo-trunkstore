@@ -151,7 +151,7 @@ onnet_data(CallID, AccountId, FromUser, ToDID, Options, State) ->
                          ,{?KEY_CCVS, CCVs}
                          ,{?KEY_REQUESTOR_CCVS, ts_callflow:get_custom_channel_vars(State)}
                          ,{?KEY_REQUESTOR_CSHS, CustomSIPHeaders}
-                         ,{<<"Continue-After">>, false}
+                         ,{<<"Continue-After">>, 'false'}
                          | kz_api:default_headers(ts_callflow:get_worker_queue(State)
                                                  ,?APP_NAME, ?APP_VERSION
                                                  )
@@ -163,10 +163,10 @@ onnet_data(CallID, AccountId, FromUser, ToDID, Options, State) ->
         lager:debug("we know how to route this call, sending park route response"),
         send_park(State, Command)
     catch
-        ?STACKTRACE(_A, _B, ST)
-        lager:info("exception ~p:~p", [_A, _B]),
-        kz_log:log_stacktrace(ST),
-        ts_callflow:send_hangup(State)
+        _A:_B:ST ->
+            lager:info("exception ~p:~p", [_A, _B]),
+            kz_log:log_stacktrace(ST),
+            ts_callflow:send_hangup(State)
     after
         ts_callflow:cleanup_amqp(State)
     end.
