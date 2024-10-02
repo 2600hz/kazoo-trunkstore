@@ -1,4 +1,4 @@
-# Trunkstore *Lightweight trunking services*
+# Lightweight trunking services
 
 Trunkstore provides SIP connectivity to existing PBXs. In contrast to the callflow application, trunkstore minimally processes calls it is configured to handle, with limited features available.
 
