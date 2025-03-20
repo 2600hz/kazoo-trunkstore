@@ -251,8 +251,8 @@ bypass_media(L) ->
     end.
 
 -spec delay(kz_json:objects() | kz_term:api_binaries()) ->
-          kz_json:object() | kz_term:api_binary().
-delay(L) -> simple_extract(L).
+          kz_term:api_integer().
+delay(L) -> kz_term:to_integer(simple_extract(L)).
 
 -spec ignore_early_media(kz_json:objects() | kz_term:api_binaries()) ->
           kz_json:object() | kz_term:api_binary().
