@@ -274,6 +274,7 @@ simple_extract(['undefined'|T]) -> simple_extract(T);
 simple_extract([<<>> | T]) -> simple_extract(T);
 simple_extract([B | _T]) when is_binary(B) -> B;
 simple_extract([Int | _T]) when is_integer(Int) -> Int;
+simple_extract([B | _T]) when is_boolean(B) -> B;
 simple_extract([JObj | T]) ->
     case kz_json:is_json_object(JObj)
         andalso (not kz_json:is_empty(JObj))
