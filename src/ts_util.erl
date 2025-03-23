@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2010-2023, 2600Hz
+%%% @copyright (C) 2010-2025, 2600Hz
 %%% @doc utility functions for Trunkstore
 %%% Some functions make use of the inet_parse module. This is an undocumented
 %%% module, and as such the functions may change or be removed.
@@ -251,16 +251,16 @@ bypass_media(L) ->
     end.
 
 -spec delay(kz_json:objects() | kz_term:api_binaries()) ->
-          kz_json:object() | kz_term:api_binary().
-delay(L) -> simple_extract(L).
+          kz_term:api_integer().
+delay(L) -> kz_term:to_integer(simple_extract(L)).
 
 -spec ignore_early_media(kz_json:objects() | kz_term:api_binaries()) ->
           kz_json:object() | kz_term:api_binary().
 ignore_early_media(L) -> simple_extract(L).
 
 -spec ep_timeout(kz_json:objects() | kz_term:api_binaries()) ->
-          kz_json:object() | kz_term:api_binary().
-ep_timeout(L) -> simple_extract(L).
+          kz_term:api_integer().
+ep_timeout(L) -> kz_term:to_integer(simple_extract(L)).
 
 -spec offnet_flags(list()) -> 'undefined' | list().
 offnet_flags([]) -> 'undefined';
@@ -273,6 +273,9 @@ simple_extract([]) -> 'undefined';
 simple_extract(['undefined'|T]) -> simple_extract(T);
 simple_extract([<<>> | T]) -> simple_extract(T);
 simple_extract([B | _T]) when is_binary(B) -> B;
+simple_extract([Int | _T]) when is_integer(Int) -> Int;
+simple_extract([B | _T]) when is_boolean(B) -> B;
+simple_extract([B | _T]) when is_list(B) -> B;
 simple_extract([JObj | T]) ->
     case kz_json:is_json_object(JObj)
         andalso (not kz_json:is_empty(JObj))
