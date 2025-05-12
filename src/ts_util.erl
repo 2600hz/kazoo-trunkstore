@@ -15,11 +15,9 @@
 %%%-----------------------------------------------------------------------------
 -module(ts_util).
 
--export([find_ip/1
-        ,filter_active_calls/2
+-export([filter_active_calls/2
         ,get_media_handling/1
         ]).
--export([constrain_weight/1]).
 
 -export([get_call_duration/1
         ,lookup_did/2
@@ -45,29 +43,12 @@
         ]).
 
 -include("ts.hrl").
--include_lib("kernel/include/inet.hrl"). %% for hostent record, used in find_ip/1
 
 %% Account views
 -define(TS_VIEW_DIDLOOKUP, <<"trunkstore/lookup_did">>).
 
 -define(VALIDATE_CALLER_ID, kapps_config:get_is_true(?CONFIG_CAT, <<"ensure_valid_caller_id">>, 'false')).
 -define(HONOR_DIVERSION, kapps_config:get_is_true(?CONFIG_CAT, <<"honor_diversions_by_cid_validation">>, 'false')).
-
--spec find_ip(kz_term:ne_binary() | nonempty_string()) -> nonempty_string().
-find_ip(Domain) when is_binary(Domain) ->
-    find_ip(binary_to_list(Domain));
-find_ip(Domain) when is_list(Domain) ->
-    case inet_parse:address(Domain) of
-        {'ok', _I} -> Domain;
-        _Huh ->
-            %% eventually we'll want to support both IPv4 and IPv6
-            case inet:gethostbyname(Domain, 'inet') of
-                {'error', _Err} -> Domain;
-                {'ok', #hostent{h_addr_list=[]}} -> Domain;
-                {'ok', #hostent{h_addr_list=[Addr | _Rest]}} ->
-                    inet_parse:ntoa(Addr)
-            end
-    end.
 
 %% FilterOn: CallID | flat_rate | per_min
 %% Remove active call entries based on what Filter criteria is passed in
@@ -92,13 +73,6 @@ get_media_handling(L) ->
         <<"process">> -> <<"process">>;
         _ -> <<"bypass">>
     end.
-
--spec constrain_weight(kz_term:ne_binary() | integer()) -> integer().
-constrain_weight(W) when not is_integer(W) ->
-    constrain_weight(kz_term:to_integer(W));
-constrain_weight(W) when W > 100 -> 100;
-constrain_weight(W) when W < 1 -> 1;
-constrain_weight(W) -> W.
 
 -spec lookup_did(kz_term:ne_binary(), kz_term:ne_binary()) ->
           {'ok', kz_json:object()} |
@@ -165,9 +139,9 @@ merge_account_attributes(AccountDoc, JObj) ->
              ),
     kz_json:set_values(Props, JObj).
 
--spec get_call_duration(kz_json:object()) -> integer().
+-spec get_call_duration(kz_json:object()) -> kz_term:api_integer().
 get_call_duration(JObj) ->
-    kz_term:to_integer(kz_json:get_value(<<"Billing-Seconds">>, JObj)).
+    kz_json:get_integer_value(<<"Billing-Seconds">>, JObj).
 
 -spec invite_format(kz_term:ne_binary(), kz_term:ne_binary()) -> kz_term:proplist().
 invite_format(<<"e.164">>, To) ->
@@ -252,7 +226,8 @@ bypass_media(L) ->
 
 -spec delay(kz_json:objects() | kz_term:api_binaries()) ->
           kz_term:api_integer().
-delay(L) -> kz_term:to_integer(simple_extract(L)).
+delay(L) ->
+    kz_term:safe_cast(simple_extract(L), 'undefined', fun kz_term:to_integer/1).
 
 -spec ignore_early_media(kz_json:objects() | kz_term:api_binaries()) ->
           kz_json:object() | kz_term:api_binary().
@@ -260,7 +235,8 @@ ignore_early_media(L) -> simple_extract(L).
 
 -spec ep_timeout(kz_json:objects() | kz_term:api_binaries()) ->
           kz_term:api_integer().
-ep_timeout(L) -> kz_term:to_integer(simple_extract(L)).
+ep_timeout(L) ->
+    kz_term:safe_cast(simple_extract(L), 'undefined', fun kz_term:to_integer/1).
 
 -spec offnet_flags(list()) -> 'undefined' | list().
 offnet_flags([]) -> 'undefined';
