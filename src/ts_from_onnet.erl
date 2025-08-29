@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2023, 2600Hz
+%%% @copyright (C) 2011-2025, 2600Hz
 %%% @doc Calls coming from known clients, getting settings for caller-id and
 %%% what not, and sending the calls offnet.
 %%%
@@ -147,7 +147,7 @@ onnet_data(CallID, AccountId, FromUser, ToDID, Options, State) ->
                          ,{?KEY_IGNORE_EARLY_MEDIA, kz_json:get_value(<<"ignore_early_media">>, DIDOptions)}
                          ,{?KEY_RINGBACK, kz_json:get_value(<<"ringback">>, DIDOptions)}
                          ,{?KEY_CSHS, SIPHeaders}
-                         ,{?KEY_HUNT_ACCOUNT_ID, kz_json:get_value(<<"hunt_account_id">>, ServerOptions)}
+                         ,{?KEY_HUNT_ACCOUNT_ID, kz_json:get_value(<<"hunt_account_id">>, ServerOptions, kapps_call:hunt_account_id(AccountId))}
                          ,{?KEY_CCVS, CCVs}
                          ,{?KEY_REQUESTOR_CCVS, ts_callflow:get_custom_channel_vars(State)}
                          ,{?KEY_REQUESTOR_CSHS, CustomSIPHeaders}
@@ -178,7 +178,12 @@ get_flags(DIDOptions, ServerOptions, AccountOptions, State) ->
     Routines = [fun get_offnet_flags/5
                ,fun get_offnet_dynamic_flags/5
                ],
-    lists:foldl(fun(F, A) -> F(DIDOptions, ServerOptions, AccountOptions, Call, A) end, Flags, Routines).
+    lists:uniq(
+      lists:foldl(fun(F, A) -> F(DIDOptions, ServerOptions, AccountOptions, Call, A) end
+                 ,Flags
+                 ,Routines
+                 )
+     ).
 
 -spec get_offnet_flags(kz_json:object(), kz_json:object(), kz_json:object(), kapps_call:call(), kz_term:ne_binaries()) -> kz_term:ne_binaries().
 get_offnet_flags(DIDOptions, ServerOptions, AccountOptions, _Call, Flags) ->

@@ -1,5 +1,5 @@
 %%%-----------------------------------------------------------------------------
-%%% @copyright (C) 2011-2023, 2600Hz
+%%% @copyright (C) 2011-2025, 2600Hz
 %%% @doc Calls coming from offnet (in this case, likely stepswitch) potentially
 %%% destined for a trunkstore client, or, if the account exists and
 %%% failover is configured, to an external DID or SIP URI
@@ -265,7 +265,7 @@ try_failover_e164(State, ToDID) ->
           ,{?KEY_ACCOUNT_REALM, kzd_accounts:fetch_realm(AccountId)}
           ,{<<"Control-Queue">>, CtlQ}
           ,{<<"Application-Name">>, <<"bridge">>}
-          ,{<<"Flags">>, kz_json:get_value(<<"flags">>, Endpoint)}
+          ,{<<"Flags">>, kz_json:get_value(<<"Flags">>, Endpoint)}
           ,{<<"Timeout">>, Timeout}
           ,{<<"Ignore-Early-Media">>, kz_json:get_value(<<"ignore_early_media">>, Endpoint)}
           ,{<<"Outbound-Caller-ID-Name">>, kz_json:get_ne_binary_value(<<"Outbound-Caller-ID-Name">>, Endpoint)}
@@ -379,7 +379,7 @@ routing_data(ToDID, AccountId, Settings) ->
     AcctStuff = kzd_trunkstore:account(Settings),
     AuthOpts = kz_json:get_value(<<"auth">>, Srv, kz_json:new()),
     DIDOptions = kz_json:get_value(<<"DID_Opts">>, Settings, kz_json:new()),
-    HuntAccountId = kz_json:get_value(<<"hunt_account_id">>, Srv),
+    HuntAccountId = kz_json:get_ne_binary_value(<<"hunt_account_id">>, Srv, default_hunt_account_id(AccountId)),
     RouteOpts = kz_json:get_value(<<"options">>, DIDOptions, []),
     NumConfig = case knm_numbers:get(ToDID, [{'auth_by', AccountId}]) of
                     {'ok', [JObj]} -> JObj;
@@ -464,6 +464,7 @@ routing_data(ToDID, AccountId, Settings) ->
                        ,{<<"To-IP">>, build_ip(ToIP, ToPort)}
                        ,{<<"Route-Options">>, RouteOpts}
                        ,{<<"Hunt-Account-ID">>, HuntAccountId}
+                       ,{<<"Flags">>, get_flags(Settings, AccountId)}
                        ,{<<"Trunkstore-ID">>, kzd_trunkserver:trunkstore_id(Settings)}
                        ,{<<"Trunkserver-ID">>, kzd_trunkserver:server_id(Settings)}
                        ,{<<"Authorizing-ID">>, kz_doc:id(Settings)} % connectivity doc id
@@ -471,6 +472,27 @@ routing_data(ToDID, AccountId, Settings) ->
            V =/= 'undefined',
            V =/= <<>>
     ].
+
+-spec get_flags(kz_json:object(), kz_term:ne_binary()) -> kz_term:ne_binaries().
+get_flags(Settings, AccountId) ->
+    Srv = kzd_trunkserver:server(Settings),
+    Funs = [{fun kapps_call:set_account_id/2, AccountId}
+           ,{fun kapps_call:set_account_db/2, kzs_util:format_account_db(AccountId)}
+           ],
+    Default = kz_attributes:get_flags(?APP_NAME, kapps_call:exec(Funs, kapps_call:new())),
+    case kz_json:find(<<"codecs">>, [Srv, Settings]) of
+        [] -> Default;
+        Flags when is_list(Flags) ->
+            lists:uniq([Flag || Flag <- Flags, kz_term:is_ne_binary(Flag)] ++ Default);
+        _ -> Default
+    end.
+
+-spec default_hunt_account_id(kz_term:ne_binary()) -> kz_term:api_ne_binary().
+default_hunt_account_id(AccountId) ->
+    case kapps_call:should_use_local_resources(AccountId) of
+        'false' -> 'undefined';
+        'true' -> kapps_call:hunt_account_id(AccountId)
+    end.
 
 -spec build_ip(kz_term:api_binary(), kz_term:api_binary() | integer()) -> kz_term:api_binary().
 build_ip('undefined', _) -> 'undefined';
